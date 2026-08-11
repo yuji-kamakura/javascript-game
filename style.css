@@ -351,6 +351,167 @@ h1 {
   box-shadow: 0 2px 0 #753019;
 }
 
+.connection-launch-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.connection-launch-actions .secondary-button {
+  min-height: 42px;
+  padding: 7px 8px;
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
+.connection-overlay {
+  z-index: 8;
+  padding: 12px;
+}
+
+.connection-panel {
+  position: relative;
+  width: min(100%, 390px);
+  max-height: calc(100% - 4px);
+  padding: 20px 18px 17px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.connection-panel h2 {
+  margin-bottom: 12px;
+}
+
+.connection-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid #76523e;
+  border-radius: 50%;
+  color: #fff4e2;
+  background: #352117;
+  font-size: 1.25rem;
+  cursor: pointer;
+}
+
+.connection-diagnostics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.connection-diagnostics p {
+  min-width: 0;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid rgba(226, 197, 158, 0.2);
+  border-radius: 8px;
+  background: rgba(11, 18, 25, 0.55);
+}
+
+.connection-diagnostics span,
+.connection-diagnostics strong {
+  display: block;
+}
+
+.connection-diagnostics span {
+  color: #bda991;
+  font-size: 0.57rem;
+  letter-spacing: 0.08em;
+}
+
+.connection-diagnostics strong {
+  margin-top: 2px;
+  overflow: hidden;
+  color: #eef9ff;
+  font-size: 0.72rem;
+  text-overflow: ellipsis;
+}
+
+.connection-message {
+  margin: 0 0 12px;
+  padding: 9px 10px;
+  border-radius: 8px;
+  color: #dfd2bf;
+  background: rgba(10, 8, 7, 0.45);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.connection-message.error {
+  color: #ffd7d7;
+  background: rgba(122, 25, 30, 0.55);
+}
+
+.connection-message.connected {
+  color: #d9ffe6;
+  background: rgba(20, 104, 57, 0.55);
+}
+
+.connection-section {
+  display: grid;
+  gap: 8px;
+}
+
+.connection-section.hidden {
+  display: none;
+}
+
+.connection-section label {
+  margin-top: 3px;
+  color: #f0d7b5;
+  text-align: left;
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.signal-text {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+  border: 1px solid #6e5140;
+  border-radius: 8px;
+  padding: 8px;
+  color: #eaf5ff;
+  background: #101820;
+  font: 0.58rem/1.4 Consolas, monospace;
+}
+
+.signal-text:focus {
+  outline: 2px solid #4c9f9a;
+  outline-offset: 1px;
+}
+
+.compact-button {
+  min-height: 39px;
+  padding: 8px 10px;
+  font-size: 0.72rem;
+}
+
+.compact-button:disabled {
+  cursor: not-allowed;
+  filter: grayscale(0.7);
+  opacity: 0.5;
+}
+
+#sendPingButton.hidden {
+  display: none;
+}
+
+.text-button {
+  margin-top: 13px;
+  border: 0;
+  color: #d5b99b;
+  background: transparent;
+  font-size: 0.7rem;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 .pause-actions {
   display: grid;
   gap: 13px;

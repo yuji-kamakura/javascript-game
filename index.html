@@ -55,6 +55,10 @@
             </div>
           </div>
           <button id="startButton" class="primary-button" type="button">ゲームスタート</button>
+          <div class="connection-launch-actions" aria-label="WebRTC接続実験">
+            <button id="createConnectionButton" class="secondary-button" type="button">接続実験を作る</button>
+            <button id="joinConnectionButton" class="secondary-button" type="button">接続実験に参加する</button>
+          </div>
           <p class="help">タップ、ドラッグ、またはマウスでラケットを動かします</p>
         </div>
       </div>
@@ -79,10 +83,52 @@
           <p class="help">もう一度 Esc キーを押しても再開できます</p>
         </div>
       </div>
+
+      <div id="connectionExperiment" class="overlay connection-overlay hidden">
+        <div class="panel connection-panel">
+          <button id="closeConnectionButton" class="connection-close" type="button" aria-label="接続実験を閉じる">×</button>
+          <p class="panel-label">P2P CONNECTION TEST</p>
+          <h2 id="connectionTitle">接続実験</h2>
+
+          <div class="connection-diagnostics" aria-live="polite">
+            <p><span>接続</span><strong id="peerConnectionState">未接続</strong></p>
+            <p><span>ICE</span><strong id="iceConnectionState">new</strong></p>
+            <p><span>control</span><strong id="controlChannelState">closed</strong></p>
+            <p><span>realtime</span><strong id="realtimeChannelState">closed</strong></p>
+            <p><span>RTT</span><strong id="connectionRtt">—</strong></p>
+          </div>
+
+          <p id="connectionMessage" class="connection-message">接続方法を準備しています。</p>
+
+          <section id="hostConnectionSection" class="connection-section hidden">
+            <label for="offerOutput">1. Offerを相手へコピー</label>
+            <textarea id="offerOutput" class="signal-text" readonly spellcheck="false" maxlength="65536"></textarea>
+            <button id="copyOfferButton" class="secondary-button compact-button" type="button" disabled>Offerをコピー</button>
+
+            <label for="answerInput">2. 相手のAnswerを貼り付け</label>
+            <textarea id="answerInput" class="signal-text" placeholder="ここにAnswerを貼り付け" spellcheck="false" maxlength="65536" autocapitalize="off" autocomplete="off"></textarea>
+            <button id="applyAnswerButton" class="primary-button compact-button" type="button">Answerを適用</button>
+          </section>
+
+          <section id="guestConnectionSection" class="connection-section hidden">
+            <label for="offerInput">1. 相手のOfferを貼り付け</label>
+            <textarea id="offerInput" class="signal-text" placeholder="ここにOfferを貼り付け" spellcheck="false" maxlength="65536" autocapitalize="off" autocomplete="off"></textarea>
+            <button id="createAnswerButton" class="primary-button compact-button" type="button">Offerを適用してAnswerを作る</button>
+
+            <label for="answerOutput">2. Answerを相手へコピー</label>
+            <textarea id="answerOutput" class="signal-text" readonly spellcheck="false" maxlength="65536"></textarea>
+            <button id="copyAnswerButton" class="secondary-button compact-button" type="button" disabled>Answerをコピー</button>
+          </section>
+
+          <button id="sendPingButton" class="secondary-button compact-button hidden" type="button">pingを送信</button>
+          <button id="endConnectionButton" class="text-button" type="button">接続実験を終了</button>
+        </div>
+      </div>
     </section>
   </main>
 
   <script src="game.js"></script>
+  <script type="module" src="./connection-experiment.mjs"></script>
   <script>
     if ("serviceWorker" in navigator) {
       window.addEventListener("load", () => {

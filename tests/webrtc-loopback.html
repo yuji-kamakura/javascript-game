@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WebRTC Loopback Test</title>
+  <style>
+    body { margin: 2rem; color: #eee; background: #17120f; font: 16px system-ui; }
+    #result { padding: 1rem; border: 2px solid #777; border-radius: 8px; }
+    .pass { border-color: #48c777 !important; color: #bfffd3; }
+    .fail { border-color: #e55353 !important; color: #ffd1d1; }
+    pre { white-space: pre-wrap; }
+  </style>
+</head>
+<body>
+  <h1>WebRTC同一ページ接続テスト</h1>
+  <p id="result">実行中...</p>
+  <pre id="details"></pre>
+
+  <script type="module">
+    import { runLoopbackConnectionTest } from "../connection-experiment.mjs";
+
+    const resultElement = document.getElementById("result");
+    const detailsElement = document.getElementById("details");
+
+    try {
+      const result = await runLoopbackConnectionTest();
+      resultElement.textContent = "PASS";
+      resultElement.className = "pass";
+      detailsElement.textContent = JSON.stringify(result, null, 2);
+      document.title = "PASS - WebRTC Loopback Test";
+    } catch (error) {
+      resultElement.textContent = "FAIL";
+      resultElement.className = "fail";
+      detailsElement.textContent = error.stack || error.message;
+      document.title = "FAIL - WebRTC Loopback Test";
+    }
+  </script>
+</body>
+</html>
