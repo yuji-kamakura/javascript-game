@@ -2,14 +2,67 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>JavaScript Game</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#25160f">
+  <title>木製ピンポン</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <h1>JavaScript Game</h1>
+  <main class="game-shell">
+    <header class="title-area">
+      <p class="eyebrow">WOODEN ARCADE</p>
+      <h1>木製ピンポン</h1>
+    </header>
 
-  <canvas id="gameCanvas" width="800" height="500"></canvas>
+    <section class="game-frame" aria-label="木製ピンポンゲーム">
+      <div class="score score-cpu" aria-live="polite">
+        <span>CPU</span><strong id="cpuScore">0</strong>
+      </div>
+
+      <canvas id="gameCanvas" width="480" height="800">
+        このゲームを遊ぶにはCanvas対応ブラウザが必要です。
+      </canvas>
+
+      <div class="score score-player" aria-live="polite">
+        <span>YOU</span><strong id="playerScore">0</strong>
+      </div>
+
+      <div id="menu" class="overlay">
+        <div class="panel">
+          <p class="panel-label">先に5点で勝利</p>
+          <h2>難易度を選ぶ</h2>
+          <div class="difficulty-group" role="radiogroup" aria-label="CPUの難易度">
+            <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false">弱</button>
+            <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true">中</button>
+            <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false">強</button>
+          </div>
+          <button id="startButton" class="primary-button" type="button">ゲームスタート</button>
+          <p class="help">台の下半分をタップ／クリックしてラケットを動かします</p>
+        </div>
+      </div>
+
+      <div id="gameOver" class="overlay hidden">
+        <div class="panel">
+          <p class="panel-label">GAME SET</p>
+          <h2 id="resultText">あなたの勝ち！</h2>
+          <p id="finalScore" class="final-score">5 - 0</p>
+          <button id="restartButton" class="primary-button" type="button">もう一度遊ぶ</button>
+        </div>
+      </div>
+
+      <div id="pauseMenu" class="overlay hidden">
+        <div class="panel">
+          <p class="panel-label">PAUSED</p>
+          <h2>ゲームを中断中</h2>
+          <div class="pause-actions">
+            <button id="resumeButton" class="primary-button" type="button">再開する</button>
+            <button id="quitButton" class="secondary-button" type="button">終了してメニューへ</button>
+          </div>
+          <p class="help">もう一度 Esc キーを押しても再開できます</p>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <script src="game.js"></script>
 </body>
