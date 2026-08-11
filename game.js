@@ -13,7 +13,11 @@ const restartButton = document.getElementById("restartButton");
 const pauseMenuElement = document.getElementById("pauseMenu");
 const resumeButton = document.getElementById("resumeButton");
 const quitButton = document.getElementById("quitButton");
+const headerMenuButton = document.getElementById("headerMenuButton");
+const hardLevelPanel = document.getElementById("hardLevelPanel");
+const hardLevelLabel = document.getElementById("hardLevelLabel");
 const difficultyButtons = [...document.querySelectorAll(".difficulty")];
+const hardLevelButtons = [...document.querySelectorAll(".level")];
 
 const GAME = Object.freeze({
   width: 480,
@@ -45,11 +49,26 @@ const STATES = Object.freeze({
 const DIFFICULTIES = Object.freeze({
   easy: { reaction: 0.34, speed: 190, error: 38 },
   normal: { reaction: 0.2, speed: 270, error: 23 },
-  hard: { reaction: 0.1, speed: 355, error: 13 },
+  hard: [
+    { reaction: 0.14, speed: 315, error: 18 },
+    { reaction: 0.12, speed: 335, error: 15 },
+    { reaction: 0.1, speed: 355, error: 13 },
+    { reaction: 0.08, speed: 380, error: 10 },
+    { reaction: 0.06, speed: 410, error: 8 },
+  ],
 });
+
+const HARD_PADDLE_COLORS = Object.freeze([
+  { fill: "#f8f8f4", rim: "#aab4c0", glow: "rgba(213, 235, 255, 0.3)" },
+  { fill: "#ffe44d", rim: "#b58c00", glow: "rgba(255, 228, 77, 0.42)" },
+  { fill: "#ff72c6", rim: "#a91e72", glow: "rgba(255, 70, 184, 0.48)" },
+  { fill: "#e32636", rim: "#721018", glow: "rgba(255, 30, 48, 0.58)" },
+  { fill: "#15171b", rim: "#d8dde5", glow: "rgba(178, 44, 255, 0.75)" },
+]);
 
 let state = STATES.MENU;
 let selectedDifficulty = "normal";
+let selectedHardLevel = 1;
 let playerScore = 0;
 let cpuScore = 0;
 let countdownRemaining = GAME.countdownSeconds;
@@ -57,6 +76,17 @@ let scoredTimer = 0;
 let nextServeDirection = -1;
 let lastTime = performance.now();
 let stateBeforePause = STATES.PLAYING;
+let gameOverRevealTimer = 0;
+let audioContext = null;
+let bgmTimer = null;
+let bgmStep = 0;
+let activeTouchPointerId = null;
+
+const soundCooldowns = {
+  paddle: 0,
+  wall: 0,
+  goal: 0,
+};
 
 const player = createPaddle(GAME.width / 2, 650);
 const cpu = createPaddle(GAME.width / 2, 132);
@@ -92,6 +122,141 @@ function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
 }
 
+function enableAudio() {
+  try {
+    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContextClass) return;
+    if (!audioContext) audioContext = new AudioContextClass();
+    if (audioContext.state === "suspended") {
+      audioContext.resume().catch(() => {});
+    }
+  } catch {
+    audioContext = null;
+  }
+}
+
+function playTone(frequency, duration, options = {}) {
+  if (!audioContext || audioContext.state !== "running") return;
+
+  try {
+    const startAt = audioContext.currentTime + (options.delay || 0);
+    const oscillator = audioContext.createOscillator();
+    const gain = audioContext.createGain();
+    oscillator.type = options.type || "sine";
+    oscillator.frequency.setValueAtTime(frequency, startAt);
+    if (options.endFrequency) {
+      oscillator.frequency.exponentialRampToValueAtTime(options.endFrequency, startAt + duration);
+    }
+    gain.gain.setValueAtTime(0.0001, startAt);
+    gain.gain.exponentialRampToValueAtTime(options.volume || 0.09, startAt + 0.006);
+    gain.gain.exponentialRampToValueAtTime(0.0001, startAt + duration);
+    oscillator.connect(gain);
+    gain.connect(audioContext.destination);
+    oscillator.start(startAt);
+    oscillator.stop(startAt + duration + 0.01);
+  } catch {
+    // 音声機能の失敗がゲーム進行へ影響しないようにする。
+  }
+}
+
+function playSound(name) {
+  if (!audioContext || audioContext.state !== "running") return;
+
+  const now = performance.now();
+  const cooldown = name === "paddle" ? 65 : name === "wall" ? 45 : 160;
+  if (name in soundCooldowns) {
+    if (now < soundCooldowns[name]) return;
+    soundCooldowns[name] = now + cooldown;
+  }
+
+  if (name === "paddle") {
+    playTone(240, 0.055, { type: "square", endFrequency: 165, volume: 0.07 });
+  } else if (name === "wall") {
+    playTone(620, 0.035, { type: "triangle", endFrequency: 460, volume: 0.045 });
+  } else if (name === "goal") {
+    playTone(190, 0.14, { type: "sawtooth", endFrequency: 95, volume: 0.075 });
+    playTone(380, 0.11, { type: "triangle", endFrequency: 260, volume: 0.05, delay: 0.04 });
+  } else if (name === "win") {
+    playTone(392, 0.14, { type: "triangle", volume: 0.07 });
+    playTone(523, 0.16, { type: "triangle", volume: 0.075, delay: 0.12 });
+    playTone(659, 0.24, { type: "triangle", volume: 0.08, delay: 0.25 });
+  } else if (name === "lose") {
+    playTone(294, 0.18, { type: "sawtooth", endFrequency: 247, volume: 0.055 });
+    playTone(220, 0.28, { type: "sawtooth", endFrequency: 147, volume: 0.06, delay: 0.16 });
+  }
+}
+
+function vibrate(duration) {
+  try {
+    if (typeof navigator.vibrate === "function") navigator.vibrate(duration);
+  } catch {
+    // 振動非対応・拒否時もゲームは継続する。
+  }
+}
+
+function getBgmTrack() {
+  if (selectedDifficulty === "easy") {
+    return {
+      interval: 480,
+      type: "triangle",
+      volume: 0.018,
+      notes: [261.63, 329.63, 392, 329.63, 293.66, 349.23, 392, 329.63],
+    };
+  }
+
+  if (selectedDifficulty === "normal") {
+    return {
+      interval: 270,
+      type: "square",
+      volume: 0.014,
+      notes: [329.63, 392, 493.88, 392, 440, 523.25, 493.88, 392],
+    };
+  }
+
+  const intervals = [250, 215, 180, 150, 122];
+  const roots = [110, 116.54, 123.47, 130.81, 138.59];
+  const root = roots[selectedHardLevel - 1];
+  return {
+    interval: intervals[selectedHardLevel - 1],
+    type: selectedHardLevel >= 4 ? "sawtooth" : "square",
+    volume: 0.014 + selectedHardLevel * 0.002,
+    notes: [root, root * 1.5, root, root * 1.78, root, root * 2, root * 1.5, root * 1.33],
+  };
+}
+
+function playBgmStep() {
+  if (![STATES.COUNTDOWN, STATES.PLAYING, STATES.SCORED].includes(state)) return;
+  const track = getBgmTrack();
+  const note = track.notes[bgmStep % track.notes.length];
+  playTone(note, track.interval / 1000 * 0.72, {
+    type: track.type,
+    volume: track.volume,
+  });
+
+  if (selectedDifficulty === "hard" && bgmStep % 4 === 0) {
+    playTone(note / 2, track.interval / 1000 * 1.8, {
+      type: "sawtooth",
+      volume: 0.012 + selectedHardLevel * 0.0015,
+    });
+  }
+  bgmStep += 1;
+}
+
+function startBgm() {
+  stopBgm();
+  const track = getBgmTrack();
+  bgmStep = 0;
+  playBgmStep();
+  bgmTimer = window.setInterval(playBgmStep, track.interval);
+}
+
+function stopBgm() {
+  if (bgmTimer !== null) {
+    window.clearInterval(bgmTimer);
+    bgmTimer = null;
+  }
+}
+
 function resetPositions() {
   Object.assign(player, createPaddle(GAME.width / 2, 650));
   Object.assign(cpu, createPaddle(GAME.width / 2, 132));
@@ -122,6 +287,7 @@ function launchBall() {
 }
 
 function startGame() {
+  enableAudio();
   playerScore = 0;
   cpuScore = 0;
   nextServeDirection = -1;
@@ -129,26 +295,33 @@ function startGame() {
   menuElement.classList.add("hidden");
   gameOverElement.classList.add("hidden");
   pauseMenuElement.classList.add("hidden");
+  cpuScoreElement.parentElement.classList.remove("victory-score");
+  playerScoreElement.parentElement.classList.remove("victory-score");
   beginCountdown();
+  startBgm();
 }
 
 function pauseGame() {
   if (![STATES.PLAYING, STATES.COUNTDOWN, STATES.SCORED].includes(state)) return;
   stateBeforePause = state;
   state = STATES.PAUSED;
+  stopBgm();
   pauseMenuElement.classList.remove("hidden");
 }
 
 function resumeGame() {
   if (state !== STATES.PAUSED) return;
+  enableAudio();
   state = stateBeforePause;
   pauseMenuElement.classList.add("hidden");
   lastTime = performance.now();
+  startBgm();
 }
 
 function quitToMenu() {
   if (state !== STATES.PAUSED) return;
   state = STATES.MENU;
+  stopBgm();
   playerScore = 0;
   cpuScore = 0;
   updateScoreDisplay();
@@ -158,9 +331,24 @@ function quitToMenu() {
   menuElement.classList.remove("hidden");
 }
 
-function updateScoreDisplay() {
+function updateScoreDisplay(scorer = null) {
   cpuScoreElement.textContent = cpuScore;
   playerScoreElement.textContent = playerScore;
+  setScoreStyle(cpuScoreElement, cpuScore);
+  setScoreStyle(playerScoreElement, playerScore);
+
+  const changedElement = scorer === "player" ? playerScoreElement : cpuScoreElement;
+  if (scorer) {
+    changedElement.classList.remove("score-pop");
+    void changedElement.offsetWidth;
+    changedElement.classList.add("score-pop");
+  }
+}
+
+function setScoreStyle(element, score) {
+  for (let value = 0; value <= GAME.winScore; value += 1) {
+    element.classList.toggle(`score-value-${value}`, value === score);
+  }
 }
 
 function scorePoint(scorer) {
@@ -169,15 +357,22 @@ function scorePoint(scorer) {
   if (scorer === "player") playerScore += 1;
   else cpuScore += 1;
 
-  updateScoreDisplay();
+  updateScoreDisplay(scorer);
+  playSound("goal");
+  vibrate(45);
   ball.vx = 0;
   ball.vy = 0;
 
   if (playerScore >= GAME.winScore || cpuScore >= GAME.winScore) {
     state = STATES.GAME_OVER;
+    stopBgm();
+    gameOverRevealTimer = 0.5;
     resultTextElement.textContent = playerScore > cpuScore ? "あなたの勝ち！" : "CPUの勝ち";
     finalScoreElement.textContent = `${playerScore} - ${cpuScore}`;
-    gameOverElement.classList.remove("hidden");
+    const winnerElement = playerScore > cpuScore ? playerScoreElement : cpuScoreElement;
+    winnerElement.parentElement.classList.add("victory-score");
+    playSound(playerScore > cpuScore ? "win" : "lose");
+    vibrate(140);
     return;
   }
 
@@ -191,7 +386,9 @@ function updatePlayer(dt) {
 }
 
 function updateCpu(dt) {
-  const settings = DIFFICULTIES[selectedDifficulty];
+  const settings = selectedDifficulty === "hard"
+    ? DIFFICULTIES.hard[selectedHardLevel - 1]
+    : DIFFICULTIES[selectedDifficulty];
   cpuControl.timer -= dt;
 
   if (cpuControl.timer <= 0) {
@@ -259,9 +456,11 @@ function updateBall(dt) {
   if (ball.x < left) {
     ball.x = left;
     ball.vx = Math.abs(ball.vx);
+    playSound("wall");
   } else if (ball.x > right) {
     ball.x = right;
     ball.vx = -Math.abs(ball.vx);
+    playSound("wall");
   }
 
   collideWithPaddle(cpu);
@@ -280,6 +479,7 @@ function updateBall(dt) {
     if (!inGoal) {
       ball.y = GAME.wall + ball.radius;
       ball.vy = Math.abs(ball.vy);
+      playSound("wall");
     }
   }
 
@@ -291,6 +491,7 @@ function updateBall(dt) {
     if (!inGoal) {
       ball.y = GAME.height - GAME.wall - ball.radius;
       ball.vy = -Math.abs(ball.vy);
+      playSound("wall");
     }
   }
 
@@ -339,6 +540,7 @@ function collideWithPaddle(paddle) {
   );
   ball.vx = (ball.vx / reflectedSpeed) * targetSpeed;
   ball.vy = (ball.vy / reflectedSpeed) * targetSpeed;
+  playSound("paddle");
 }
 
 function limitBallSpeed() {
@@ -388,6 +590,12 @@ function update(dt) {
   if (state === STATES.SCORED) {
     scoredTimer -= dt;
     if (scoredTimer <= 0) beginCountdown();
+    return;
+  }
+
+  if (state === STATES.GAME_OVER && gameOverRevealTimer > 0) {
+    gameOverRevealTimer -= dt;
+    if (gameOverRevealTimer <= 0) gameOverElement.classList.remove("hidden");
   }
 }
 
@@ -396,8 +604,8 @@ function draw() {
   drawGoals();
   drawCenterLine();
   drawRipples();
-  drawPaddle(cpu, "#c46b55");
-  drawPaddle(player, "#4c9f9a");
+  drawPaddle(cpu, "#c46b55", true);
+  drawPaddle(player, "#4c9f9a", false);
   drawBall();
 
   if (state === STATES.COUNTDOWN) drawCountdown();
@@ -406,30 +614,64 @@ function draw() {
 
 function drawTable() {
   const gradient = ctx.createLinearGradient(0, 0, GAME.width, GAME.height);
-  gradient.addColorStop(0, "#a56537");
-  gradient.addColorStop(0.5, "#8d512d");
-  gradient.addColorStop(1, "#704025");
+  if (selectedDifficulty === "easy") {
+    gradient.addColorStop(0, "#a56537");
+    gradient.addColorStop(0.5, "#8d512d");
+    gradient.addColorStop(1, "#704025");
+  } else if (selectedDifficulty === "normal") {
+    gradient.addColorStop(0, "#287b54");
+    gradient.addColorStop(0.5, "#176842");
+    gradient.addColorStop(1, "#0d4c32");
+  } else {
+    const intensity = selectedHardLevel / 5;
+    gradient.addColorStop(0, `rgb(${24 + intensity * 12}, ${42 - intensity * 12}, ${61 + intensity * 18})`);
+    gradient.addColorStop(0.5, `rgb(${13 + intensity * 10}, ${28 - intensity * 9}, ${45 + intensity * 14})`);
+    gradient.addColorStop(1, `rgb(${7 + intensity * 8}, ${15 - intensity * 5}, ${28 + intensity * 8})`);
+  }
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, GAME.width, GAME.height);
 
   ctx.save();
-  ctx.globalAlpha = 0.16;
-  ctx.strokeStyle = "#3e2013";
-  ctx.lineWidth = 2;
-  for (let x = 8; x < GAME.width; x += 24) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    for (let y = 0; y <= GAME.height; y += 30) {
-      ctx.lineTo(x + Math.sin(y * 0.025 + x) * 5, y);
+  if (selectedDifficulty === "easy") {
+    ctx.globalAlpha = 0.16;
+    ctx.strokeStyle = "#3e2013";
+    ctx.lineWidth = 2;
+    for (let x = 8; x < GAME.width; x += 24) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      for (let y = 0; y <= GAME.height; y += 30) {
+        ctx.lineTo(x + Math.sin(y * 0.025 + x) * 5, y);
+      }
+      ctx.stroke();
     }
-    ctx.stroke();
+  } else {
+    const gridSize = selectedDifficulty === "hard" ? 40 : 60;
+    ctx.globalAlpha = selectedDifficulty === "hard" ? 0.18 + selectedHardLevel * 0.025 : 0.12;
+    ctx.strokeStyle = selectedDifficulty === "hard" ? "#88cfff" : "#d7ffe9";
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= GAME.width; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, GAME.height);
+      ctx.stroke();
+    }
+    for (let y = 0; y <= GAME.height; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(GAME.width, y);
+      ctx.stroke();
+    }
   }
   ctx.restore();
 
-  ctx.strokeStyle = "#3d2115";
+  ctx.strokeStyle = selectedDifficulty === "easy"
+    ? "#3d2115"
+    : selectedDifficulty === "normal" ? "#063e29" : "#07101b";
   ctx.lineWidth = GAME.wall * 2;
   ctx.strokeRect(0, 0, GAME.width, GAME.height);
-  ctx.strokeStyle = "rgba(240, 196, 133, 0.45)";
+  ctx.strokeStyle = selectedDifficulty === "hard"
+    ? `rgba(85, 196, 255, ${0.38 + selectedHardLevel * 0.08})`
+    : "rgba(240, 235, 190, 0.45)";
   ctx.lineWidth = 2;
   ctx.strokeRect(GAME.wall, GAME.wall, GAME.width - GAME.wall * 2, GAME.height - GAME.wall * 2);
 }
@@ -440,7 +682,7 @@ function drawGoals() {
   ctx.fillRect(x, 0, GAME.goalWidth, GAME.wall + 7);
   ctx.fillRect(x, GAME.height - GAME.wall - 7, GAME.goalWidth, GAME.wall + 7);
 
-  ctx.strokeStyle = "#f0c579";
+  ctx.strokeStyle = selectedDifficulty === "hard" ? "#86d9ff" : "#f0e0a5";
   ctx.lineWidth = 4;
   ctx.beginPath();
   ctx.moveTo(x, GAME.wall + 8);
@@ -459,7 +701,9 @@ function drawGoals() {
 function drawCenterLine() {
   ctx.save();
   ctx.setLineDash([12, 12]);
-  ctx.strokeStyle = "rgba(255, 236, 196, 0.5)";
+  ctx.strokeStyle = selectedDifficulty === "hard"
+    ? "rgba(119, 216, 255, 0.65)"
+    : "rgba(255, 246, 214, 0.5)";
   ctx.lineWidth = 3;
   ctx.beginPath();
   ctx.moveTo(GAME.wall + 6, GAME.centerY);
@@ -473,16 +717,43 @@ function drawCenterLine() {
   ctx.stroke();
 }
 
-function drawPaddle(paddle, rimColor) {
+function drawPaddle(paddle, rimColor, isCpu) {
+  const hardStyle = isCpu && selectedDifficulty === "hard"
+    ? HARD_PADDLE_COLORS[selectedHardLevel - 1]
+    : null;
+  const fillColor = hardStyle ? hardStyle.fill : "#f4f0e7";
+  const edgeColor = hardStyle ? hardStyle.rim : rimColor;
+
   ctx.save();
-  ctx.shadowColor = "rgba(0, 0, 0, 0.45)";
-  ctx.shadowBlur = 11;
+  ctx.shadowColor = hardStyle ? hardStyle.glow : "rgba(0, 0, 0, 0.45)";
+  ctx.shadowBlur = hardStyle ? 10 + selectedHardLevel * 4 : 11;
   ctx.shadowOffsetY = 7;
   ctx.fillStyle = "#cfc9bd";
   ctx.beginPath();
   ctx.arc(paddle.x, paddle.y + 4, paddle.radius, 0, Math.PI * 2);
   ctx.fill();
   ctx.shadowColor = "transparent";
+
+  if (hardStyle && selectedHardLevel >= 3) {
+    const teeth = 8 + selectedHardLevel * 2;
+    ctx.fillStyle = edgeColor;
+    for (let i = 0; i < teeth; i += 1) {
+      const angle = (Math.PI * 2 * i) / teeth;
+      const inner = paddle.radius - 1;
+      const outer = paddle.radius + 3 + selectedHardLevel;
+      ctx.beginPath();
+      ctx.moveTo(
+        paddle.x + Math.cos(angle - 0.09) * inner,
+        paddle.y + Math.sin(angle - 0.09) * inner,
+      );
+      ctx.lineTo(paddle.x + Math.cos(angle) * outer, paddle.y + Math.sin(angle) * outer);
+      ctx.lineTo(
+        paddle.x + Math.cos(angle + 0.09) * inner,
+        paddle.y + Math.sin(angle + 0.09) * inner,
+      );
+      ctx.fill();
+    }
+  }
 
   const gradient = ctx.createRadialGradient(
     paddle.x - 10,
@@ -492,14 +763,14 @@ function drawPaddle(paddle, rimColor) {
     paddle.y,
     paddle.radius,
   );
-  gradient.addColorStop(0, "#ffffff");
-  gradient.addColorStop(0.72, "#f4f0e7");
-  gradient.addColorStop(1, "#cfc9bd");
+  gradient.addColorStop(0, hardStyle && selectedHardLevel === 5 ? "#777b85" : "#ffffff");
+  gradient.addColorStop(0.72, fillColor);
+  gradient.addColorStop(1, hardStyle && selectedHardLevel === 5 ? "#050608" : "#cfc9bd");
   ctx.fillStyle = gradient;
   ctx.beginPath();
   ctx.arc(paddle.x, paddle.y, paddle.radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.strokeStyle = rimColor;
+  ctx.strokeStyle = edgeColor;
   ctx.lineWidth = 5;
   ctx.stroke();
 
@@ -558,12 +829,14 @@ function drawMessage(text) {
   ctx.restore();
 }
 
-function handlePointer(event) {
+function handlePointer(event, showRipple = true) {
   if (state !== STATES.PLAYING && state !== STATES.COUNTDOWN) return;
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
   const x = ((event.clientX - rect.left) / rect.width) * GAME.width;
-  const y = ((event.clientY - rect.top) / rect.height) * GAME.height;
+  const pointerY = ((event.clientY - rect.top) / rect.height) * GAME.height;
+  const touchOffset = event.pointerType === "touch" ? player.radius * 1.5 : 0;
+  const y = pointerY - touchOffset;
   player.targetX = clamp(
     x,
     GAME.wall + player.radius,
@@ -574,7 +847,9 @@ function handlePointer(event) {
     GAME.centerY + 28 + player.radius,
     GAME.height - GAME.wall - 52 - player.radius,
   );
-  ripples.push({ x: player.targetX, y: player.targetY, life: 0.38, duration: 0.38 });
+  if (showRipple) {
+    ripples.push({ x: player.targetX, y: player.targetY, life: 0.38, duration: 0.38 });
+  }
 }
 
 function resizeCanvas() {
@@ -602,6 +877,7 @@ function gameLoop(time) {
 difficultyButtons.forEach((button) => {
   button.addEventListener("click", () => {
     selectedDifficulty = button.dataset.level;
+    hardLevelPanel.classList.toggle("hidden", selectedDifficulty !== "hard");
     difficultyButtons.forEach((item) => {
       const selected = item === button;
       item.classList.toggle("selected", selected);
@@ -610,14 +886,42 @@ difficultyButtons.forEach((button) => {
   });
 });
 
+hardLevelButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    selectedHardLevel = Number(button.dataset.hardLevel);
+    hardLevelLabel.textContent = selectedHardLevel;
+    hardLevelButtons.forEach((item) => {
+      item.classList.toggle("selected", item === button);
+    });
+  });
+});
+
 startButton.addEventListener("click", startGame);
 restartButton.addEventListener("click", startGame);
 resumeButton.addEventListener("click", resumeGame);
 quitButton.addEventListener("click", quitToMenu);
-canvas.addEventListener("pointerdown", handlePointer, { passive: false });
-canvas.addEventListener("pointermove", (event) => {
-  if (event.pointerType === "mouse") handlePointer(event);
+headerMenuButton.addEventListener("click", () => {
+  if (state === STATES.PAUSED) resumeGame();
+  else pauseGame();
+});
+canvas.addEventListener("pointerdown", (event) => {
+  if (event.pointerType !== "mouse") {
+    activeTouchPointerId = event.pointerId;
+    canvas.setPointerCapture?.(event.pointerId);
+  }
+  handlePointer(event);
 }, { passive: false });
+canvas.addEventListener("pointermove", (event) => {
+  if (event.pointerType === "mouse" || event.pointerId === activeTouchPointerId) {
+    handlePointer(event, false);
+  }
+}, { passive: false });
+canvas.addEventListener("pointerup", (event) => {
+  if (event.pointerId === activeTouchPointerId) activeTouchPointerId = null;
+});
+canvas.addEventListener("pointercancel", (event) => {
+  if (event.pointerId === activeTouchPointerId) activeTouchPointerId = null;
+});
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 window.addEventListener("resize", resizeCanvas);
 document.addEventListener("keydown", (event) => {
@@ -627,5 +931,6 @@ document.addEventListener("keydown", (event) => {
   else pauseGame();
 });
 
+updateScoreDisplay();
 resizeCanvas();
 requestAnimationFrame(gameLoop);

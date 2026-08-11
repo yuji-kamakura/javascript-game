@@ -40,9 +40,14 @@ button {
 }
 
 .title-area {
+  position: relative;
+  width: 100%;
   flex: 0 0 auto;
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 2px 0 7px;
+  text-align: center;
 }
 
 .eyebrow {
@@ -58,6 +63,26 @@ h1 {
   font-family: Georgia, "Yu Mincho", serif;
   font-size: clamp(1.15rem, 4vw, 1.55rem);
   letter-spacing: 0.1em;
+}
+
+.header-menu-button {
+  position: absolute;
+  right: 0;
+  top: 50%;
+  min-height: 38px;
+  padding: 7px 10px;
+  transform: translateY(-50%);
+  border: 1px solid #815539;
+  border-radius: 9px;
+  color: #fff1d9;
+  background: rgba(59, 34, 22, 0.9);
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.header-menu-button:active {
+  transform: translateY(calc(-50% + 2px));
 }
 
 .game-frame {
@@ -91,8 +116,8 @@ h1 {
   display: flex;
   align-items: center;
   gap: 9px;
-  min-width: 88px;
-  padding: 4px 13px;
+  min-width: 150px;
+  padding: 7px 16px;
   border: 1px solid rgba(255, 245, 218, 0.3);
   border-radius: 999px;
   background: rgba(34, 18, 10, 0.76);
@@ -109,8 +134,71 @@ h1 {
 
 .score strong {
   margin-left: auto;
-  font-size: 1.12rem;
-  line-height: 1;
+  font-size: 5.6rem;
+  line-height: 0.82;
+  transition: color 180ms ease, text-shadow 180ms ease;
+  transform-origin: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.score-value-0 {
+  color: #fff8e9;
+  font-family: Arial, sans-serif;
+  font-weight: 500;
+}
+
+.score-value-1 {
+  color: #fff0c7;
+  font-family: "Trebuchet MS", sans-serif;
+  font-weight: 700;
+}
+
+.score-value-2 {
+  color: #ffe39c;
+  font-family: Georgia, serif;
+  font-weight: 700;
+}
+
+.score-value-3 {
+  color: #ffd06b;
+  font-family: "Arial Black", sans-serif;
+  font-weight: 900;
+  text-shadow: 0 0 8px rgba(255, 187, 70, 0.35);
+}
+
+.score-value-4 {
+  color: #ffad45;
+  font-family: Impact, "Arial Black", sans-serif;
+  font-weight: 900;
+  text-shadow: 0 0 13px rgba(255, 126, 35, 0.6);
+}
+
+.score-value-5 {
+  color: #fff176;
+  font-family: Impact, "Arial Black", sans-serif;
+  font-weight: 900;
+  text-shadow: 0 0 18px #ff9f35, 0 0 30px rgba(255, 73, 31, 0.75);
+}
+
+.score-pop {
+  animation: score-pop 280ms ease-out;
+}
+
+.victory-score strong {
+  animation: victory-score 500ms ease-out;
+}
+
+@keyframes score-pop {
+  0% { transform: scale(0.65); }
+  62% { transform: scale(1.2); }
+  100% { transform: scale(1); }
+}
+
+@keyframes victory-score {
+  0% { transform: scale(1); filter: brightness(1); }
+  45% { transform: scale(1.5) rotate(-5deg); filter: brightness(1.7); }
+  72% { transform: scale(1.32) rotate(4deg); filter: brightness(1.35); }
+  100% { transform: scale(1); filter: brightness(1); }
 }
 
 .score-cpu {
@@ -181,9 +269,22 @@ h1 {
 }
 
 .difficulty {
+  display: grid;
+  place-content: center;
+  gap: 2px;
   border: 1px solid #805638;
   background: #392318;
   font-weight: 700;
+}
+
+.difficulty strong {
+  font-size: 1rem;
+}
+
+.difficulty span {
+  font-size: 0.56rem;
+  line-height: 1.15;
+  opacity: 0.78;
 }
 
 .difficulty.selected {
@@ -191,6 +292,49 @@ h1 {
   color: #2b170d;
   background: #e6a852;
   box-shadow: 0 0 0 2px rgba(230, 168, 82, 0.2);
+}
+
+.hard-level-panel {
+  margin: -6px 0 16px;
+  padding: 10px;
+  border: 1px solid rgba(225, 229, 240, 0.28);
+  border-radius: 11px;
+  background: rgba(10, 17, 27, 0.62);
+}
+
+.hard-level-panel.hidden {
+  display: none;
+}
+
+.hard-level-panel p {
+  margin: 0 0 8px;
+  color: #dce7f4;
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+.level-group {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+
+.level {
+  min-width: 0;
+  min-height: 34px;
+  border: 1px solid #596777;
+  border-radius: 7px;
+  color: #f7fbff;
+  background: #26313d;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.level.selected {
+  border-color: #ff718b;
+  background: #a52c45;
+  box-shadow: 0 0 10px rgba(255, 63, 105, 0.45);
 }
 
 .primary-button {
@@ -252,7 +396,12 @@ h1 {
 }
 
 @media (max-height: 630px) {
-  .title-area {
+  .eyebrow {
     display: none;
+  }
+
+  .title-area {
+    min-height: 40px;
+    padding-bottom: 4px;
   }
 }

@@ -4,17 +4,20 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
   <meta name="theme-color" content="#25160f">
-  <title>木製ピンポン</title>
+  <title>ピンポン</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <main class="game-shell">
     <header class="title-area">
-      <p class="eyebrow">WOODEN ARCADE</p>
-      <h1>木製ピンポン</h1>
+      <div>
+        <p class="eyebrow">TABLE ARCADE</p>
+        <h1>ピンポン</h1>
+      </div>
+      <button id="headerMenuButton" class="header-menu-button" type="button" aria-label="ゲームメニューを開く">☰ メニュー</button>
     </header>
 
-    <section class="game-frame" aria-label="木製ピンポンゲーム">
+    <section class="game-frame" aria-label="ピンポンゲーム">
       <div class="score score-cpu" aria-live="polite">
         <span>CPU</span><strong id="cpuScore">0</strong>
       </div>
@@ -32,12 +35,22 @@
           <p class="panel-label">先に5点で勝利</p>
           <h2>難易度を選ぶ</h2>
           <div class="difficulty-group" role="radiogroup" aria-label="CPUの難易度">
-            <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false">弱</button>
-            <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true">中</button>
-            <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false">強</button>
+            <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false"><strong>弱</strong><span>木製</span></button>
+            <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true"><strong>中</strong><span>緑の卓球台</span></button>
+            <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false"><strong>強</strong><span>エアホッケー</span></button>
+          </div>
+          <div id="hardLevelPanel" class="hard-level-panel hidden" aria-label="エアホッケーレベル">
+            <p>エアホッケー LEVEL <strong id="hardLevelLabel">1</strong></p>
+            <div class="level-group">
+              <button class="level selected" type="button" data-hard-level="1">1</button>
+              <button class="level" type="button" data-hard-level="2">2</button>
+              <button class="level" type="button" data-hard-level="3">3</button>
+              <button class="level" type="button" data-hard-level="4">4</button>
+              <button class="level" type="button" data-hard-level="5">5</button>
+            </div>
           </div>
           <button id="startButton" class="primary-button" type="button">ゲームスタート</button>
-          <p class="help">台の下半分をタップ／クリックしてラケットを動かします</p>
+          <p class="help">タップ、ドラッグ、またはマウスでラケットを動かします</p>
         </div>
       </div>
 
