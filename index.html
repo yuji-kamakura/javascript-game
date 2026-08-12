@@ -2,7 +2,7 @@
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0714" />
     <meta name="description" content="闇の塔を進む、スマホ対応アクションゲーム。" />
     <meta property="og:title" content="Tower Guardian" />
@@ -17,7 +17,7 @@
     <title>Tower Guardian</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" href="icons/icon-192.png" />
-    <link rel="apple-touch-icon" href="icons/icon-192.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
     <link rel="stylesheet" href="style.css" />
   </head>
 
@@ -29,21 +29,27 @@
 
     <main class="game-shell">
       <canvas id="gameCanvas" width="800" height="600" aria-label="Tower Guardian ゲーム画面"></canvas>
+      <p id="gameStatus" class="sr-only" aria-live="polite">タイトル画面</p>
 
-      <div id="touchControls" aria-label="タッチ操作">
-        <div class="dpad" aria-label="移動">
-          <button class="touch-button up" data-key="up" aria-label="上へ移動">▲</button>
-          <button class="touch-button left" data-key="left" aria-label="左へ移動">◀</button>
-          <button class="touch-button down" data-key="down" aria-label="下へ移動">▼</button>
-          <button class="touch-button right" data-key="right" aria-label="右へ移動">▶</button>
+      <div id="touchControls" role="group" aria-label="タッチ操作">
+        <div class="dpad" role="group" aria-label="移動">
+          <button type="button" class="touch-button up" data-key="up" aria-label="上へ移動">▲</button>
+          <button type="button" class="touch-button left" data-key="left" aria-label="左へ移動">◀</button>
+          <button type="button" class="touch-button down" data-key="down" aria-label="下へ移動">▼</button>
+          <button type="button" class="touch-button right" data-key="right" aria-label="右へ移動">▶</button>
         </div>
-        <div class="actions" aria-label="アクション">
-          <button class="touch-button action" data-key="action" aria-label="アクション">Z</button>
-          <button class="touch-button dash" data-key="dash" aria-label="ダッシュ">DASH</button>
-          <button class="touch-button fire" data-key="fire" aria-label="攻撃">FIRE</button>
+        <div class="actions" role="group" aria-label="アクション">
+          <button type="button" class="touch-button dash" data-key="dash" aria-label="ダッシュ">DASH</button>
+          <button type="button" class="touch-button fire" data-key="fire" aria-label="攻撃">FIRE</button>
         </div>
-        <button class="touch-button pause" data-key="pause" aria-label="一時停止">Ⅱ</button>
+        <button type="button" class="touch-button pause" data-key="pause" aria-label="一時停止">Ⅱ</button>
       </div>
+
+      <button id="mobileInstallButton" class="mobile-install-button" type="button" hidden>ホーム画面に追加</button>
+      <aside id="iosInstallHint" class="install-hint" hidden>
+        Safariの共有ボタンから「ホーム画面に追加」を選ぶと、アプリとして遊べます。
+        <button type="button" data-dismiss-install aria-label="案内を閉じる">×</button>
+      </aside>
 
       <div class="rotate-hint" role="status">
         <span class="phone-icon" aria-hidden="true">↻</span>

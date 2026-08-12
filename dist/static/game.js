@@ -1,5 +1,38 @@
 const canvas = document.getElementById("gameCanvas");
 const ctx = canvas.getContext("2d");
+const isTouchDevice = window.matchMedia("(pointer: coarse)").matches;
+
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function loadNumber(key, fallback, min = 0, max = Number.MAX_SAFE_INTEGER) {
+  try {
+    const value = Number(localStorage.getItem(key));
+    return Number.isFinite(value) ? clamp(value, min, max) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function loadObject(key) {
+  try {
+    const value = JSON.parse(localStorage.getItem(key));
+    return value && typeof value === "object" && !Array.isArray(value)
+      ? value
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveValue(key, value) {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // Private browsing and full storage must not stop the game.
+  }
+}
 
 let player = {
   x: 100,
@@ -15,6 +48,7 @@ let bullets = [];
 let enemyBullets = [];
 let items = [];
 let particles = [];
+let walls = [];
 
 let bossActive = false;
 let bossExitUnlocked = false;
@@ -27,7 +61,10 @@ let lastSoundTimes = {
 let audioCtx = null;
 
 function initAudio() {
-  if (audioCtx) return;
+  if (audioCtx) {
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+    return;
+  }
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
   } catch (e) {
@@ -147,8 +184,16 @@ let mouseY = 0;
 
 function updatePointerPosition(event) {
   const rect = canvas.getBoundingClientRect();
-  mouseX = (event.clientX - rect.left) * (canvas.width / rect.width);
-  mouseY = (event.clientY - rect.top) * (canvas.height / rect.height);
+  mouseX = clamp(
+    (event.clientX - rect.left) * (canvas.width / rect.width),
+    0,
+    canvas.width,
+  );
+  mouseY = clamp(
+    (event.clientY - rect.top) * (canvas.height / rect.height),
+    0,
+    canvas.height,
+  );
 }
 
 canvas.addEventListener("mousemove", function (event) {
@@ -174,9 +219,25 @@ let playerFacingX = 1;
 let playerFacingY = 0;
 
 let spacePressed = false;
-let zPressed = false;
 let shiftPressed = false;
 let mousePressed = false;
+let touchFirePressed = false;
+let manualAimPointerId = null;
+
+function resetInputState() {
+  rightPressed = false;
+  leftPressed = false;
+  upPressed = false;
+  downPressed = false;
+  spacePressed = false;
+  shiftPressed = false;
+  mousePressed = false;
+  touchFirePressed = false;
+  manualAimPointerId = null;
+  document
+    .querySelectorAll(".touch-button.active")
+    .forEach((button) => button.classList.remove("active"));
+}
 
 let stamina = 100;
 let maxStamina = 100;
@@ -192,8 +253,8 @@ let burstActive = false;
 let burstTimer = 0;
 const burstDuration = 300; // フレーム数（60FPSなら約5秒）
 
-let highScore = Number(localStorage.getItem("highScore")) || 0;
-let bestWave = Number(localStorage.getItem("bestWave")) || 1;
+let highScore = loadNumber("highScore", 0, 0, 999999999);
+let bestWave = loadNumber("bestWave", 1, 1, 9999);
 
 let wave = 1;
 let enemiesToSpawn = 3;
@@ -205,21 +266,23 @@ let gameTime = 0;
 let gameState = "start";
 
 // 永続通貨（銀行）と永久アップグレード
-let bank = Number(localStorage.getItem("bank")) || 0;
-let permanentUpgrades = JSON.parse(
-  localStorage.getItem("permanentUpgrades"),
-) || {
-  hpLevel: 0, // each +1 max HP
-  staminaLevel: 0, // each +10 max stamina
-  damageLevel: 0, // each +10% damage
+let bank = loadNumber("bank", 0, 0, 999999999);
+const savedUpgrades = loadObject("permanentUpgrades");
+let permanentUpgrades = {
+  hpLevel: clamp(Math.floor(Number(savedUpgrades.hpLevel) || 0), 0, 100),
+  staminaLevel: clamp(
+    Math.floor(Number(savedUpgrades.staminaLevel) || 0),
+    0,
+    100,
+  ),
+  damageLevel: clamp(
+    Math.floor(Number(savedUpgrades.damageLevel) || 0),
+    0,
+    100,
+  ),
+  autoAimUnlocked: savedUpgrades.autoAimUnlocked === true,
+  autoAimEnabled: savedUpgrades.autoAimEnabled === true,
 };
-
-// 古いセーブデータにも村の新項目を補う
-permanentUpgrades.hpLevel = permanentUpgrades.hpLevel || 0;
-permanentUpgrades.staminaLevel = permanentUpgrades.staminaLevel || 0;
-permanentUpgrades.damageLevel = permanentUpgrades.damageLevel || 0;
-permanentUpgrades.autoAimUnlocked = permanentUpgrades.autoAimUnlocked || false;
-permanentUpgrades.autoAimEnabled = permanentUpgrades.autoAimEnabled || false;
 
 // ラン中のアップグレード（ボス選択で得られる、そのプレイ中のみ有効）
 let runUpgrades = {
@@ -240,9 +303,7 @@ const bossRerollCost = 10; // 銀行からのコスト
 const autoAimUnlockCost = 10; // 通常敵約10体、初心者の1〜2回の挑戦を想定
 
 let playerRecentlyHit = 0;
-const bossDodgeThreshold = 220; // 無被弾でダウンまでのフレーム数
-const bossStunDuration = 120; // ボスダウン中のフレーム数
-const bossWarningDuration = 60; // ダウン前の警告時間
+const playerInvulnerabilityFrames = 30;
 
 // ヘルパー: 永続アップグレード適用
 function applyPermanentUpgrades() {
@@ -258,6 +319,55 @@ function applyPermanentUpgrades() {
 }
 
 let bankedThisGame = false;
+
+function syncGameUI() {
+  document.body.dataset.gameState = gameState;
+  const status = document.getElementById("gameStatus");
+  if (status) {
+    status.textContent =
+      gameState === "playing"
+        ? `第${wave}階層、体力${Math.max(0, Math.ceil(player.hp))}`
+        : gameState === "paused"
+          ? "一時停止中"
+          : gameState === "gameover"
+            ? `挑戦終了。到達階層${wave}、スコア${score}`
+            : gameState === "bossReward"
+              ? "守護者の遺産を選択"
+              : gameState === "village"
+                ? "灯火の村"
+                : "タイトル画面";
+  }
+  const fireButton = document.querySelector('[data-key="fire"]');
+  if (fireButton) {
+    const label =
+      gameState === "start"
+        ? "START"
+        : gameState === "gameover"
+          ? "RETURN"
+          : "FIRE";
+    fireButton.textContent = label;
+    fireButton.setAttribute(
+      "aria-label",
+      gameState === "start"
+        ? "ゲームを始める"
+        : gameState === "gameover"
+          ? "村へ戻る"
+          : "攻撃",
+    );
+  }
+}
+
+function endRun() {
+  if (gameState === "gameover") return;
+  player.hp = Math.max(0, player.hp);
+  gameState = "gameover";
+  enemyBullets = [];
+  resetInputState();
+  handleGameOverBanking();
+  bankedThisGame = true;
+  saveValue("highScore", highScore);
+  syncGameUI();
+}
 
 // ==================================================
 // 壁生成
@@ -319,13 +429,19 @@ function getAimDirection() {
   const playerCenterX = player.x + player.width / 2;
   const playerCenterY = player.y + player.height / 2;
 
-  const autoTarget = gameState === "playing" ? getNearestEnemy() : null;
+  const touchTarget = touchFirePressed ? getNearestEnemy(true) : null;
+  const autoTarget =
+    touchTarget || (gameState === "playing" ? getNearestEnemy() : null);
   let dx = autoTarget
     ? autoTarget.x + autoTarget.width / 2 - playerCenterX
-    : mouseX - playerCenterX;
+    : mousePressed || manualAimPointerId !== null
+      ? mouseX - playerCenterX
+      : playerFacingX;
   let dy = autoTarget
     ? autoTarget.y + autoTarget.height / 2 - playerCenterY
-    : mouseY - playerCenterY;
+    : mousePressed || manualAimPointerId !== null
+      ? mouseY - playerCenterY
+      : playerFacingY;
 
   const distance = Math.sqrt(dx * dx + dy * dy);
 
@@ -511,8 +627,8 @@ function createEnemy(x, y, type = "normal", parentId = null) {
   if (type === "boss") {
     // ボスは5Waveごとの強化レベルでスケール
     const bossLevel = Math.max(1, Math.floor(wave / 5));
-    const baseHp = 160;
-    const hp = baseHp + bossLevel * 120 + Math.floor((wave - 1) / 2) * 10;
+    const baseHp = 65;
+    const hp = baseHp + bossLevel * 45 + Math.floor((wave - 1) / 2) * 5;
     const speed = 0.5 + bossLevel * 0.08;
     const spawnInterval = Math.max(120, 300 - bossLevel * 20); // ミニオン召喚間隔
 
@@ -591,42 +707,21 @@ function createBoss() {
 // ==================================================
 
 function createRandomEnemy() {
-  let type;
-  const random = Math.random();
-
-  if (random < 0.35) {
-    type = "normal";
-  } else if (random < 0.55) {
-    type = "big";
-  } else if (random < 0.7) {
-    type = "shooter";
-  } else if (random < 0.8) {
-    type = "tullet";
-  } else if (random < 0.9) {
-    type = "laser";
-  } else {
-    type = "spawner";
-  }
-
-  let width;
-  let height;
-
-  if (type === "normal") {
-    width = 50;
-    height = 50;
-  } else if (type === "big") {
-    width = 80;
-    height = 80;
-  } else if (type === "shooter") {
-    width = 40;
-    height = 40;
-  } else if (type === "tullet") {
-    width = 60;
-    height = 60;
-  } else {
-    width = 45;
-    height = 45;
-  }
+  const availableTypes = ["normal", "normal", "big"];
+  if (wave >= 2) availableTypes.push("shooter");
+  if (wave >= 3) availableTypes.push("tullet");
+  if (wave >= 4) availableTypes.push("laser");
+  if (wave >= 6) availableTypes.push("spawner");
+  const type = availableTypes[Math.floor(Math.random() * availableTypes.length)];
+  const enemySizes = {
+    normal: [50, 50],
+    big: [80, 80],
+    shooter: [40, 40],
+    tullet: [60, 60],
+    laser: [45, 45],
+    spawner: [60, 60],
+  };
+  const [width, height] = enemySizes[type];
 
   let x;
   let y;
@@ -705,7 +800,7 @@ function defeatEnemy(enemy) {
 
   if (score > highScore) {
     highScore = score;
-    localStorage.setItem("highScore", highScore);
+    saveValue("highScore", highScore);
   }
 
   // Spawnerを倒したら、そのSpawnerが生み出したminionも全滅
@@ -731,7 +826,7 @@ function defeatEnemy(enemy) {
 }
 
 function savePermanentUpgrades() {
-  localStorage.setItem("permanentUpgrades", JSON.stringify(permanentUpgrades));
+  saveValue("permanentUpgrades", JSON.stringify(permanentUpgrades));
 }
 
 function enterVillage() {
@@ -751,6 +846,8 @@ function enterVillage() {
   player.hp = player.maxHp;
   displayedHp = player.hp;
   stamina = maxStamina;
+  resetInputState();
+  syncGameUI();
 }
 
 function beginTowerRun() {
@@ -764,6 +861,13 @@ function beginTowerRun() {
   bossActive = false;
   bossExitUnlocked = false;
   bankedThisGame = false;
+  burstActive = false;
+  burstTimer = 0;
+  shootCooldown = 0;
+  staminaExhausted = false;
+  playerRecentlyHit = 0;
+  particles = [];
+  resetInputState();
   runUpgrades = {
     piercing: false,
     damageMultiplier: 1,
@@ -787,6 +891,7 @@ function beginTowerRun() {
   createWalls();
   enemiesToSpawn = 3;
   for (let i = 0; i < enemiesToSpawn; i++) createRandomEnemy();
+  syncGameUI();
 }
 
 function generateBossOptions() {
@@ -943,7 +1048,7 @@ function startNextWave() {
 
   if (wave > bestWave) {
     bestWave = wave;
-    localStorage.setItem("bestWave", bestWave);
+    saveValue("bestWave", bestWave);
   }
 
   // ボスを1体攻略するたび、以降のWaveの同時出現上限が1体増える
@@ -1049,12 +1154,13 @@ function isAutoAimActive() {
   return (
     permanentUpgrades.autoAimUnlocked &&
     permanentUpgrades.autoAimEnabled &&
-    !mousePressed
+    !mousePressed &&
+    manualAimPointerId === null
   );
 }
 
-function getNearestEnemy() {
-  if (!isAutoAimActive() || enemies.length === 0) return null;
+function getNearestEnemy(force = false) {
+  if ((!force && !isAutoAimActive()) || enemies.length === 0) return null;
   const px = player.x + player.width / 2;
   const py = player.y + player.height / 2;
   let nearest = null;
@@ -1147,7 +1253,8 @@ function update() {
   // スタミナ・ダッシュ
   // ==================================================
 
-  const isDashing = shiftPressed && !staminaExhausted;
+  const isDashing =
+    shiftPressed && length > 0 && !staminaExhausted && stamina > 0;
 
   if (isDashing) {
     stamina -= staminaDrain;
@@ -1215,16 +1322,9 @@ function update() {
     bossOptions = generateBossOptions();
     bossRerollsLeft = 1;
     gameState = "bossReward";
+    resetInputState();
+    syncGameUI();
     return;
-  }
-
-  // ==================================================
-  // Zキー
-  // ==================================================
-
-  if (zPressed) {
-    player.x = 0;
-    player.y = 0;
   }
 
   // ==================================================
@@ -1300,21 +1400,28 @@ function update() {
   // ==================================================
 
   checkEnemyBulletPlayerCollision();
+  if (gameState !== "playing") return;
   checkBulletEnemyCollision();
   checkPlayerEnemyCollision();
+  if (gameState !== "playing") return;
   checkItemCollision();
   updateParticles();
-
-  if (playerRecentlyHit > 0) {
-    playerRecentlyHit--;
-  }
 
   // ==================================================
   // プレイヤー射撃
   // ==================================================
 
-  const autoTarget = getNearestEnemy();
-  if ((spacePressed || mousePressed || autoTarget) && shootCooldown <= 0) {
+  const autoTarget = touchFirePressed
+    ? getNearestEnemy(true)
+    : getNearestEnemy();
+  if (
+    (spacePressed ||
+      mousePressed ||
+      touchFirePressed ||
+      manualAimPointerId !== null ||
+      autoTarget) &&
+    shootCooldown <= 0
+  ) {
     const aim = getAimDirection();
 
     const baseBulletSpeed = burstActive ? 12 : 10;
@@ -1345,6 +1452,7 @@ function update() {
           speed: bulletspeed,
           velocityX: aim.x * bulletspeed,
           velocityY: aim.y * bulletspeed,
+          damageMultiplier: runUpgrades.burstDamageMultiplier || 1,
         });
       }
     } else {
@@ -1356,10 +1464,13 @@ function update() {
         speed: bulletspeed,
         velocityX: aim.x * bulletspeed,
         velocityY: aim.y * bulletspeed,
+        damageMultiplier: 1,
       };
 
       bullets.push(bullet);
     }
+
+    playSound("shoot");
 
     const baseCooldown = burstActive
       ? Math.max(5, shootInterval - 4)
@@ -1404,6 +1515,10 @@ function update() {
       burstActive = false;
       burstTimer = 0;
     }
+  }
+
+  if (playerRecentlyHit > 0) {
+    playerRecentlyHit--;
   }
 } // ← ここで初めて update() を閉じる
 
@@ -1776,14 +1891,18 @@ function updateEnemy() {
           });
         }
 
-        enemy.shootCooldown = 0.00000001;
+        enemy.shootCooldown = 36;
       }
 
       // ==================================================
       // Spawner
       // ==================================================
       else if (enemy.type === "spawner") {
-        const spawnCount = 2;
+        const activeMinions = enemies.filter(
+          (candidate) =>
+            candidate.type === "minion" && candidate.parentId === enemy.id,
+        ).length;
+        const spawnCount = Math.min(2, Math.max(0, 4 - activeMinions));
 
         for (let i = 0; i < spawnCount; i++) {
           const angle = ((Math.PI * 2) / spawnCount) * i;
@@ -1796,7 +1915,15 @@ function updateEnemy() {
           const spawnY =
             enemy.y + enemy.height / 2 - 5 + Math.sin(angle) * spawnDistance;
 
-          createEnemy(spawnX, spawnY, "minion", enemy.id);
+          const spawnProbe = {
+            x: spawnX,
+            y: spawnY,
+            width: 10,
+            height: 10,
+          };
+          if (!checkCollision(spawnProbe)) {
+            createEnemy(spawnX, spawnY, "minion", enemy.id);
+          }
         }
 
         // 4秒後に再召喚（60FPS）
@@ -1960,13 +2087,12 @@ function checkBulletEnemyCollision() {
         // ダメージ計算（ランアップグレードを反映）
         const baseDamage = 1;
         const permMultiplier = 1 + (permanentUpgrades.damageLevel || 0) * 0.1;
-        let damage = Math.ceil(
+        let damage =
           baseDamage *
             (runUpgrades.damageMultiplier || 1) *
             permMultiplier *
             (1 + (runUpgrades.killDamagePerKill || 0) * kills) *
-            (burstActive ? runUpgrades.burstDamageMultiplier || 1 : 1),
-        );
+            (bullet.damageMultiplier || 1);
 
         if (Math.random() < (runUpgrades.critChance || 0)) {
           damage *= 2;
@@ -2013,6 +2139,7 @@ function checkBulletEnemyCollision() {
 // ==================================================
 
 function checkPlayerEnemyCollision() {
+  if (playerRecentlyHit > 0) return;
   for (let i = enemies.length - 1; i >= 0; i--) {
     const enemy = enemies[i];
 
@@ -2022,7 +2149,8 @@ function checkPlayerEnemyCollision() {
       player.y < enemy.y + enemy.height &&
       player.y + player.height > enemy.y
     ) {
-      player.hp -= enemy.hp;
+      player.hp -= Math.max(1, Math.min(3, Math.ceil(enemy.hp / 3)));
+      playerRecentlyHit = playerInvulnerabilityFrames;
 
       // 敵を倒した扱いにしてスコアやアイテムを処理
       defeatEnemy(enemy);
@@ -2035,7 +2163,7 @@ function checkPlayerEnemyCollision() {
       enemies.splice(i, 1);
 
       if (player.hp <= 0) {
-        gameState = "gameover";
+        endRun();
       }
 
       return;
@@ -2082,6 +2210,7 @@ function checkCollision(object) {
 // ==================================================
 
 function checkEnemyBulletPlayerCollision() {
+  if (playerRecentlyHit > 0) return;
   for (let i = enemyBullets.length - 1; i >= 0; i--) {
     const bullet = enemyBullets[i];
 
@@ -2094,7 +2223,7 @@ function checkEnemyBulletPlayerCollision() {
       enemyBullets.splice(i, 1);
 
       player.hp--;
-      playerRecentlyHit = 60;
+      playerRecentlyHit = playerInvulnerabilityFrames;
       spawnParticles(
         player.x + player.width / 2,
         player.y + player.height / 2,
@@ -2104,7 +2233,8 @@ function checkEnemyBulletPlayerCollision() {
       playSound("damage");
 
       if (player.hp <= 0) {
-        gameState = "gameover";
+        endRun();
+        return;
       }
     }
   }
@@ -2298,7 +2428,7 @@ function drawStartScreen() {
   ctx.shadowBlur = 16;
   ctx.fillStyle = "#d5c7a1";
   ctx.font = "bold 54px Georgia, serif";
-  ctx.fillText("Splatoon 4", w / 2, 105);
+  ctx.fillText("TOWER GUARDIAN", w / 2, 105);
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#8f3327";
   ctx.fillRect(w / 2 - 160, 118, 320, 2);
@@ -2323,15 +2453,33 @@ function drawStartScreen() {
   ctx.fillRect(270, 232, 260, 1);
   ctx.font = "15px sans-serif";
   ctx.fillStyle = "#aaa69d";
-  ctx.fillText("W A S D　移動　　SHIFT　ダッシュ", w / 2, 268);
-  ctx.fillText("右クリック　射撃　　R　リスタート", w / 2, 296);
+  ctx.fillText(
+    isTouchDevice
+      ? "左ボタン　移動　　DASH　高速移動"
+      : "W A S D　移動　　SHIFT　ダッシュ",
+    w / 2,
+    268,
+  );
+  ctx.fillText(
+    isTouchDevice
+      ? "FIRE　自動照準射撃　　画面タッチ　手動照準"
+      : "左クリック / SPACE　射撃　　ESC　一時停止",
+    w / 2,
+    296,
+  );
 
   const pulse = 0.72 + Math.sin(time * 3) * 0.28;
   ctx.shadowColor = "#d16841";
   ctx.shadowBlur = 12 * pulse;
   ctx.fillStyle = `rgba(240,218,166,${pulse})`;
   ctx.font = "bold 22px serif";
-  ctx.fillText("◆　[SPACEで冒険を始める]　◆", w / 2, 360);
+  ctx.fillText(
+    isTouchDevice
+      ? "◆　[FIREで冒険を始める]　◆"
+      : "◆　[SPACEで冒険を始める]　◆",
+    w / 2,
+    360,
+  );
   ctx.shadowBlur = 0;
   ctx.fillStyle = "#756d62";
   ctx.font = "12px serif";
@@ -2946,13 +3094,21 @@ function draw() {
   const playerCenterY = player.y + player.height / 2;
 
   const activelyShooting =
-    mousePressed || spacePressed || (isAutoAimActive() && enemies.length > 0);
+    mousePressed ||
+    touchFirePressed ||
+    manualAimPointerId !== null ||
+    spacePressed ||
+    (isAutoAimActive() && enemies.length > 0);
   const aim = activelyShooting
     ? getAimDirection()
     : { x: playerFacingX, y: playerFacingY };
   const playerAngle = Math.atan2(aim.y, aim.x);
 
   ctx.save();
+
+  if (playerRecentlyHit > 0 && Math.floor(playerRecentlyHit / 4) % 2 === 0) {
+    ctx.globalAlpha = 0.38;
+  }
 
   ctx.translate(playerCenterX, playerCenterY);
   ctx.rotate(playerAngle);
@@ -3153,7 +3309,9 @@ function draw() {
 
   // 自動射撃の状態。クリック長押し中は一時的に手動照準へ切り替わる。
   if (permanentUpgrades.autoAimUnlocked) {
-    const manualOverride = permanentUpgrades.autoAimEnabled && mousePressed;
+    const manualOverride =
+      permanentUpgrades.autoAimEnabled &&
+      (mousePressed || manualAimPointerId !== null);
     ctx.font = "bold 12px sans-serif";
     ctx.fillStyle = manualOverride
       ? "#ffd27a"
@@ -3162,8 +3320,8 @@ function draw() {
         : "#8f939b";
     ctx.fillText(
       manualOverride
-        ? "[Q] AUTO: 手動照準中"
-        : `[Q] AUTO: ${permanentUpgrades.autoAimEnabled ? "ON" : "OFF"}`,
+        ? `${isTouchDevice ? "AUTO" : "[Q] AUTO"}: 手動照準中`
+        : `${isTouchDevice ? "AUTO" : "[Q] AUTO"}: ${permanentUpgrades.autoAimEnabled ? "ON" : "OFF"}`,
       240,
       46,
     );
@@ -3268,7 +3426,11 @@ function draw() {
     ctx.fillText("PAUSED", canvas.width / 2, canvas.height / 2);
 
     ctx.font = "20px sans-serif";
-    ctx.fillText("ESCで再開", canvas.width / 2, canvas.height / 2 + 40);
+    ctx.fillText(
+      isTouchDevice ? "Ⅱ ボタンで再開" : "ESCで再開",
+      canvas.width / 2,
+      canvas.height / 2 + 40,
+    );
     return;
   }
 
@@ -3351,14 +3513,15 @@ function draw() {
     ctx.shadowColor = "#b77a3e";
     ctx.shadowBlur = 8 * retryPulse;
     ctx.font = "bold 17px serif";
-    ctx.fillText("◆  R  灯火の村へ帰還  ◆", canvas.width / 2, 456);
+    ctx.fillText(
+      isTouchDevice
+        ? "◆  RETURN  灯火の村へ帰還  ◆"
+        : "◆  R  灯火の村へ帰還  ◆",
+      canvas.width / 2,
+      456,
+    );
     ctx.shadowBlur = 0;
 
-    // ゲームオーバー時の銀行加算を一度だけ行う
-    if (!bankedThisGame) {
-      handleGameOverBanking();
-      bankedThisGame = true;
-    }
   }
 
   // ボス報酬モーダル
@@ -3513,8 +3676,20 @@ function draw() {
 // ゲームループ
 // ==================================================
 
-function gameLoop() {
-  update();
+const fixedStep = 1000 / 60;
+let lastFrameTime = performance.now();
+let frameAccumulator = 0;
+
+function gameLoop(timestamp = performance.now()) {
+  const elapsed = Math.min(100, Math.max(0, timestamp - lastFrameTime));
+  lastFrameTime = timestamp;
+  frameAccumulator += elapsed;
+  let updates = 0;
+  while (frameAccumulator >= fixedStep && updates < 6) {
+    update();
+    frameAccumulator -= fixedStep;
+    updates++;
+  }
   draw();
 
   requestAnimationFrame(gameLoop);
@@ -4184,11 +4359,22 @@ function wrapText(context, text, x, y, maxWidth, lineHeight) {
 }
 
 document.addEventListener("keydown", function (event) {
-  if (event.code !== "F5" && event.code !== "F11") {
+  const controlledKeys = new Set([
+    "KeyW",
+    "KeyA",
+    "KeyS",
+    "KeyD",
+    "KeyQ",
+    "KeyR",
+    "ShiftLeft",
+    "ShiftRight",
+    "Space",
+    "Escape",
+  ]);
+  if (controlledKeys.has(event.code)) {
     event.preventDefault();
   }
-
-  console.log(event.code);
+  initAudio();
 
   if (event.code === "KeyD") {
     rightPressed = true;
@@ -4198,10 +4384,8 @@ document.addEventListener("keydown", function (event) {
     upPressed = true;
   } else if (event.code === "KeyS") {
     downPressed = true;
-  } else if (event.code === "ShiftLeft") {
+  } else if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
     shiftPressed = true;
-  } else if (event.code === "KeyO") {
-    player.hp = player.maxHp + 10000;
   } else if (
     event.code === "KeyQ" &&
     !event.repeat &&
@@ -4214,14 +4398,14 @@ document.addEventListener("keydown", function (event) {
     if (gameState === "playing") {
       spacePressed = true;
     }
-  } else if (event.code === "KeyZ") {
-    zPressed = true;
-  } else if (event.code === "Escape") {
+  } else if (event.code === "Escape" && !event.repeat) {
     if (gameState === "playing") {
       gameState = "paused";
+      resetInputState();
     } else if (gameState === "paused") {
       gameState = "playing";
     }
+    syncGameUI();
   }
 
   // ==================================================
@@ -4229,7 +4413,7 @@ document.addEventListener("keydown", function (event) {
   // ==================================================
 
   if (event.code === "Space") {
-    if (gameState === "start") {
+    if (gameState === "start" && !event.repeat) {
       enterVillage();
     }
   }
@@ -4248,18 +4432,20 @@ function handleGameOverBanking() {
   const earn = Math.floor(score / 10);
   if (earn > 0) {
     bank += earn;
-    localStorage.setItem("bank", bank);
+    saveValue("bank", bank);
   }
 }
 
 //マウス
 canvas.addEventListener("mousedown", function (event) {
   if (event.button === 0) {
+    initAudio();
+    updatePointerPosition(event);
     mousePressed = true;
   }
 });
 
-canvas.addEventListener("mouseup", function (event) {
+window.addEventListener("mouseup", function (event) {
   if (event.button === 0) {
     mousePressed = false;
   }
@@ -4279,7 +4465,7 @@ canvas.addEventListener("click", function (event) {
           bank -= autoAimUnlockCost;
           permanentUpgrades.autoAimUnlocked = true;
           permanentUpgrades.autoAimEnabled = true;
-          localStorage.setItem("bank", bank);
+          saveValue("bank", bank);
         }
       } else {
         permanentUpgrades.autoAimEnabled = !permanentUpgrades.autoAimEnabled;
@@ -4294,7 +4480,7 @@ canvas.addEventListener("click", function (event) {
       if (bank >= hpCost) {
         bank -= hpCost;
         permanentUpgrades.hpLevel++;
-        localStorage.setItem("bank", bank);
+        saveValue("bank", bank);
         savePermanentUpgrades();
         applyPermanentUpgrades();
         player.hp = player.maxHp;
@@ -4334,6 +4520,7 @@ canvas.addEventListener("click", function (event) {
       player.y = canvas.height / 2 - player.height / 2;
       startNextWave();
       gameState = "playing";
+      syncGameUI();
       return;
     }
   }
@@ -4351,7 +4538,7 @@ canvas.addEventListener("click", function (event) {
       bossRerollsLeft--;
     } else if (bank >= bossRerollCost) {
       bank -= bossRerollCost;
-      localStorage.setItem("bank", bank);
+      saveValue("bank", bank);
       bossOptions = generateBossOptions();
     }
   }
@@ -4370,12 +4557,10 @@ document.addEventListener("keyup", function (event) {
     upPressed = false;
   } else if (event.code === "KeyS") {
     downPressed = false;
-  } else if (event.code === "ShiftLeft") {
+  } else if (event.code === "ShiftLeft" || event.code === "ShiftRight") {
     shiftPressed = false;
   } else if (event.code === "Space") {
     spacePressed = false;
-  } else if (event.code === "KeyZ") {
-    zPressed = false;
   }
 });
 
@@ -4389,8 +4574,7 @@ const touchStateSetters = {
   left: (value) => { leftPressed = value; },
   right: (value) => { rightPressed = value; },
   dash: (value) => { shiftPressed = value; },
-  action: (value) => { zPressed = value; },
-  fire: (value) => { mousePressed = value; },
+  fire: (value) => { touchFirePressed = value; },
 };
 
 if (touchControls) {
@@ -4399,11 +4583,14 @@ if (touchControls) {
 
     button.addEventListener("pointerdown", (event) => {
       event.preventDefault();
+      initAudio();
       button.setPointerCapture(event.pointerId);
       button.classList.add("active");
 
       if (key === "pause") {
         gameState = gameState === "playing" ? "paused" : gameState === "paused" ? "playing" : gameState;
+        resetInputState();
+        syncGameUI();
       } else if (key === "fire" && gameState === "start") {
         enterVillage();
       } else if (key === "fire" && gameState === "gameover") {
@@ -4427,18 +4614,34 @@ if (touchControls) {
 canvas.addEventListener("pointerdown", (event) => {
   if (event.pointerType !== "mouse" && gameState === "playing") {
     event.preventDefault();
+    initAudio();
     updatePointerPosition(event);
-    mousePressed = true;
+    manualAimPointerId = event.pointerId;
     canvas.setPointerCapture(event.pointerId);
   }
 });
 canvas.addEventListener("pointermove", (event) => {
-  if (event.pointerType !== "mouse" && event.buttons) updatePointerPosition(event);
+  if (
+    event.pointerType !== "mouse" &&
+    event.pointerId === manualAimPointerId
+  ) {
+    updatePointerPosition(event);
+  }
 });
 const releaseCanvasTouch = (event) => {
-  if (event.pointerType !== "mouse") mousePressed = false;
+  if (
+    event.pointerType !== "mouse" &&
+    event.pointerId === manualAimPointerId
+  ) {
+    manualAimPointerId = null;
+  }
 };
 canvas.addEventListener("pointerup", releaseCanvasTouch);
 canvas.addEventListener("pointercancel", releaseCanvasTouch);
+window.addEventListener("blur", resetInputState);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) resetInputState();
+});
 
-gameLoop();
+syncGameUI();
+requestAnimationFrame(gameLoop);
