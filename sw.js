@@ -1,4 +1,5 @@
-const CACHE_NAME = "tower-guardian-v2";
+const CACHE_PREFIX = "tower-guardian-app-";
+const CACHE_NAME = `${CACHE_PREFIX}v1`;
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -29,7 +30,7 @@ self.addEventListener("activate", (event) => {
       .then((keys) =>
         Promise.all(
           keys
-            .filter((key) => key !== CACHE_NAME)
+            .filter((key) => key.startsWith(CACHE_PREFIX) && key !== CACHE_NAME)
             .map((key) => caches.delete(key)),
         ),
       )
