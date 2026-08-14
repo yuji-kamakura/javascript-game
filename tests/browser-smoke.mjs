@@ -271,12 +271,244 @@ try {
   await evaluate(session, "document.getElementById('closeConnectionButton').click()", { userGesture: true });
 
   await session.send("Page.bringToFront");
-  const soloResult = await evaluate(session, `(async () => {
+  await session.send("Emulation.setDeviceMetricsOverride", {
+    width: 390,
+    height: 844,
+    deviceScaleFactor: 2,
+    mobile: true,
+  });
+  const localResult = await evaluate(session, `(async () => {
+    const frameBounds = document.querySelector(".game-frame").getBoundingClientRect();
+    const menuPanel = document.querySelector(".menu-panel");
+    const panelBounds = menuPanel.getBoundingClientRect();
+    const menuButtons = [...menuPanel.querySelectorAll("button")];
+    const menuLayout = {
+      viewport: { width: innerWidth, height: innerHeight },
+      panelInsideFrame: panelBounds.top >= frameBounds.top
+        && panelBounds.bottom <= frameBounds.bottom
+        && panelBounds.left >= frameBounds.left
+        && panelBounds.right <= frameBounds.right,
+      panelScrollable: getComputedStyle(menuPanel).overflowY === "auto",
+      controlsFit: menuButtons.every((button) => (
+        button.scrollWidth <= button.clientWidth && button.scrollHeight <= button.clientHeight
+      )),
+    };
+    const localUi = {
+      selectedMode,
+      topLabel: document.getElementById("topPlayerLabel").textContent,
+      bottomLabel: document.getElementById("bottomPlayerLabel").textContent,
+      difficultyHidden: document.getElementById("difficultySettings").classList.contains("hidden"),
+      topScoreRotated: getComputedStyle(document.querySelector(".score-cpu")).transform !== "none",
+      topPauseActionsVisible: getComputedStyle(document.querySelector(".top-pause-actions")).display !== "none",
+    };
+    const shapeVertexCounts = {};
+    const shapeCollisions = {};
+    for (const shape of ["oval", "rect", "star"]) {
+      document.querySelector('[data-shape="' + shape + '"]').click();
+      shapeVertexCounts[shape] = getPaddleVertices(player).length;
+      Object.assign(player, {
+        x: GAME.width / 2,
+        y: 650,
+        vx: 0,
+        vy: 0,
+        radius: GAME.paddleRadius,
+        targetRadius: GAME.paddleRadius,
+      });
+      const extents = getPaddleExtents(player);
+      Object.assign(ball, {
+        x: player.x,
+        y: player.y - extents.y - ball.radius + 2,
+        vx: 0,
+        vy: 300,
+      });
+      const detected = Boolean(getPaddleCollision(player));
+      collideWithPaddle(player);
+      shapeCollisions[shape] = { detected, reflected: ball.vy < 0 };
+    }
+    const topExtents = getPaddleExtents(cpu);
+    const topMinimumY = GAME.wall + 52 + topExtents.y;
+    Object.assign(cpu, {
+      x: GAME.width / 2,
+      y: topMinimumY,
+      targetX: GAME.width / 2,
+      targetY: 0,
+      vx: 0,
+      vy: 0,
+    });
+    movePaddle(cpu, cpu.targetX, cpu.targetY, 410, 0.033);
+    constrainPaddle(cpu, "top");
+    const boundaryMotion = { y: cpu.y, minimumY: topMinimumY, vy: cpu.vy };
     document.getElementById("startButton").click();
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
     const canvas = document.getElementById("gameCanvas");
     const rect = canvas.getBoundingClientRect();
-    const playerBefore = { x: player.x, y: player.y, targetX: player.targetX, targetY: player.targetY };
+    const before = {
+      top: { x: cpu.x, y: cpu.y, targetX: cpu.targetX, targetY: cpu.targetY },
+      bottom: { x: player.x, y: player.y, targetX: player.targetX, targetY: player.targetY },
+    };
+    canvas.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 41,
+      pointerType: "touch",
+      buttons: 1,
+      clientX: rect.left + rect.width * 0.2,
+      clientY: rect.top + rect.height * 0.22,
+    }));
+    canvas.dispatchEvent(new PointerEvent("pointerdown", {
+      bubbles: true,
+      pointerId: 42,
+      pointerType: "touch",
+      buttons: 1,
+      clientX: rect.left + rect.width * 0.75,
+      clientY: rect.top + rect.height * 0.78,
+    }));
+    canvas.dispatchEvent(new PointerEvent("pointermove", {
+      bubbles: true,
+      pointerId: 41,
+      pointerType: "touch",
+      buttons: 1,
+      clientX: rect.left + rect.width * 0.82,
+      clientY: rect.top + rect.height * 0.74,
+    }));
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
+
+    const liveFrameBounds = document.querySelector(".game-frame").getBoundingClientRect();
+    const scoreBounds = [
+      document.querySelector(".score-cpu").getBoundingClientRect(),
+      document.querySelector(".score-player").getBoundingClientRect(),
+    ];
+    const canvasPixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    let paintedSamples = 0;
+    for (let index = 3; index < canvasPixels.length; index += 1600) {
+      if (canvasPixels[index] > 0) paintedSamples += 1;
+    }
+    const playLayout = {
+      scoresInsideFrame: scoreBounds.every((bounds) => (
+        bounds.top >= liveFrameBounds.top
+        && bounds.bottom <= liveFrameBounds.bottom
+        && bounds.left >= liveFrameBounds.left
+        && bounds.right <= liveFrameBounds.right
+      )),
+      paintedSamples,
+    };
+    const pointerAssignments = Object.fromEntries(activePointers);
+    const afterMovement = {
+      top: { x: cpu.x, y: cpu.y, targetX: cpu.targetX, targetY: cpu.targetY },
+      bottom: { x: player.x, y: player.y, targetX: player.targetX, targetY: player.targetY },
+    };
+    playerScore = 0;
+    cpuScore = 2;
+    updateScoreDisplay();
+    const smallHandicap = {
+      player: player.targetRadius,
+      top: cpu.targetRadius,
+      label: document.getElementById("bottomHandicap").textContent,
+    };
+    beginCountdown();
+    animatePaddleSizes(1);
+    smallHandicap.afterReset = player.targetRadius;
+    smallHandicap.liveRadius = player.radius;
+    playerScore = 3;
+    cpuScore = 0;
+    updateScoreDisplay();
+    const largeHandicap = {
+      player: player.targetRadius,
+      top: cpu.targetRadius,
+      label: document.getElementById("topHandicap").textContent,
+    };
+    for (const pointerId of [41, 42]) {
+      canvas.dispatchEvent(new PointerEvent("pointerup", {
+        bubbles: true,
+        pointerId,
+        pointerType: "touch",
+      }));
+    }
+    state = STATES.PLAYING;
+    playerScore = 0;
+    cpuScore = GAME.winScore - 1;
+    scorePoint("cpu");
+    const topWinnerResult = {
+      facingTop: document.getElementById("gameOver").classList.contains("facing-top"),
+      text: document.getElementById("resultText").textContent,
+    };
+    return {
+      menuLayout,
+      playLayout,
+      localUi,
+      shapeVertexCounts,
+      shapeCollisions,
+      boundaryMotion,
+      menuHidden: document.getElementById("menu").classList.contains("hidden"),
+      canvasWidth: canvas.width,
+      canvasHeight: canvas.height,
+      before,
+      after: afterMovement,
+      pointerAssignments,
+      pointerCountAfterRelease: activePointers.size,
+      smallHandicap,
+      largeHandicap,
+      topWinnerResult,
+    };
+  })()`, { awaitPromise: true, userGesture: true });
+  if (
+    localResult.menuLayout.viewport.width !== 390
+    || localResult.menuLayout.viewport.height !== 844
+    || !localResult.menuLayout.panelInsideFrame
+    || !localResult.menuLayout.panelScrollable
+    || !localResult.menuLayout.controlsFit
+    || !localResult.playLayout.scoresInsideFrame
+    || localResult.playLayout.paintedSamples <= 0
+    || localResult.localUi.selectedMode !== "local"
+    || localResult.localUi.topLabel !== "2P"
+    || localResult.localUi.bottomLabel !== "1P"
+    || !localResult.localUi.difficultyHidden
+    || !localResult.localUi.topScoreRotated
+    || !localResult.localUi.topPauseActionsVisible
+    || localResult.shapeVertexCounts.oval !== 28
+    || localResult.shapeVertexCounts.rect !== 4
+    || localResult.shapeVertexCounts.star !== 10
+    || !Object.values(localResult.shapeCollisions).every((collision) => (
+      collision.detected && collision.reflected
+    ))
+    || Math.abs(localResult.boundaryMotion.y - localResult.boundaryMotion.minimumY) > 0.01
+    || localResult.boundaryMotion.vy !== 0
+    || !localResult.menuHidden
+    || localResult.canvasWidth <= 0
+    || localResult.canvasHeight <= 0
+    || localResult.pointerAssignments[41] !== "top"
+    || localResult.pointerAssignments[42] !== "bottom"
+    || localResult.after.top.targetX === localResult.before.top.targetX
+    || localResult.after.bottom.targetX === localResult.before.bottom.targetX
+    || localResult.after.top.targetY >= 400
+    || localResult.pointerCountAfterRelease !== 0
+    || Math.abs(localResult.smallHandicap.player - 39.1) > 0.01
+    || Math.abs(localResult.smallHandicap.afterReset - 39.1) > 0.01
+    || Math.abs(localResult.smallHandicap.liveRadius - 39.1) > 0.01
+    || localResult.smallHandicap.top !== 34
+    || localResult.smallHandicap.label !== "RACKET +15%"
+    || localResult.largeHandicap.player !== 34
+    || Math.abs(localResult.largeHandicap.top - 44.2) > 0.01
+    || localResult.largeHandicap.label !== "RACKET +30%"
+    || !localResult.topWinnerResult.facingTop
+    || localResult.topWinnerResult.text !== "2Pの勝ち！"
+  ) {
+    throw new Error(`2人用ゲームの機能確認に失敗しました: ${JSON.stringify(localResult)}`);
+  }
+
+  const soloResult = await evaluate(session, `(async () => {
+    returnToMenu();
+    document.querySelector('[data-mode="cpu"]').click();
+    const modeUi = {
+      selectedMode,
+      topLabel: document.getElementById("topPlayerLabel").textContent,
+      difficultyHidden: document.getElementById("difficultySettings").classList.contains("hidden"),
+      topPauseActionsHidden: getComputedStyle(document.querySelector(".top-pause-actions")).display === "none",
+    };
+    document.getElementById("startButton").click();
+    await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
+    const canvas = document.getElementById("gameCanvas");
+    const rect = canvas.getBoundingClientRect();
+    const playerBefore = { x: player.x, targetX: player.targetX };
     canvas.dispatchEvent(new PointerEvent("pointermove", {
       bubbles: true,
       clientX: rect.left + rect.width * 0.75,
@@ -285,17 +517,16 @@ try {
     }));
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 300));
     return {
-      menuHidden: document.getElementById("menu").classList.contains("hidden"),
-      canvasWidth: canvas.width,
-      canvasHeight: canvas.height,
+      modeUi,
       playerBefore,
-      playerAfter: { x: player.x, y: player.y, targetX: player.targetX, targetY: player.targetY },
+      playerAfter: { x: player.x, targetX: player.targetX },
     };
   })()`, { awaitPromise: true, userGesture: true });
   if (
-    !soloResult.menuHidden
-    || soloResult.canvasWidth <= 0
-    || soloResult.canvasHeight <= 0
+    soloResult.modeUi.selectedMode !== "cpu"
+    || soloResult.modeUi.topLabel !== "CPU"
+    || soloResult.modeUi.difficultyHidden
+    || !soloResult.modeUi.topPauseActionsHidden
     || soloResult.playerAfter.targetX === soloResult.playerBefore.targetX
     || soloResult.playerAfter.x === soloResult.playerBefore.x
   ) {
@@ -309,6 +540,7 @@ try {
     manualConnection,
     disconnectDisplay,
     mobileLayout,
+    local: localResult,
     solo: soloResult,
     browserExceptions: 0,
   }, null, 2));

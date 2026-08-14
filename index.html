@@ -24,7 +24,9 @@
 
     <section class="game-frame" aria-label="ピンポンゲーム">
       <div class="score score-cpu" aria-live="polite">
-        <span>CPU</span><strong id="cpuScore">0</strong>
+        <span id="topPlayerLabel">2P</span>
+        <strong id="cpuScore">0</strong>
+        <small id="topHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
       </div>
 
       <canvas id="gameCanvas" width="480" height="800">
@@ -32,48 +34,88 @@
       </canvas>
 
       <div class="score score-player" aria-live="polite">
-        <span>YOU</span><strong id="playerScore">0</strong>
+        <span id="bottomPlayerLabel">1P</span>
+        <strong id="playerScore">0</strong>
+        <small id="bottomHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
       </div>
 
       <div id="menu" class="overlay">
-        <div class="panel">
-          <p class="panel-label">先に5点で勝利</p>
-          <h2>難易度を選ぶ</h2>
-          <div class="difficulty-group" role="radiogroup" aria-label="CPUの難易度">
-            <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false"><strong>弱</strong><span>木製</span></button>
-            <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true"><strong>中</strong><span>緑の卓球台</span></button>
-            <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false"><strong>強</strong><span>エアホッケー</span></button>
-          </div>
-          <div id="hardLevelPanel" class="hard-level-panel hidden" aria-label="エアホッケーレベル">
-            <p>エアホッケー LEVEL <strong id="hardLevelLabel">1</strong></p>
-            <div class="level-group">
-              <button class="level selected" type="button" data-hard-level="1">1</button>
-              <button class="level" type="button" data-hard-level="2">2</button>
-              <button class="level" type="button" data-hard-level="3">3</button>
-              <button class="level" type="button" data-hard-level="4">4</button>
-              <button class="level" type="button" data-hard-level="5">5</button>
+        <div class="panel menu-panel">
+          <p class="panel-label">FIRST TO 5</p>
+          <h2>対戦をセット</h2>
+          <div class="setting-block">
+            <p class="setting-title">プレーモード</p>
+            <div class="choice-group two-columns" role="radiogroup" aria-label="プレーモード">
+              <button class="choice mode-choice" type="button" data-mode="cpu" role="radio" aria-checked="false">1人 vs CPU</button>
+              <button class="choice mode-choice selected" type="button" data-mode="local" role="radio" aria-checked="true">このスマホで2人</button>
             </div>
           </div>
-          <button id="startButton" class="primary-button" type="button">ゲームスタート</button>
-          <div class="connection-launch-actions" aria-label="WebRTC接続実験">
-            <button id="createConnectionButton" class="secondary-button" type="button">接続実験を作る</button>
-            <button id="joinConnectionButton" class="secondary-button" type="button">接続実験に参加する</button>
+          <div id="difficultySettings" class="setting-block hidden">
+            <p class="setting-title">CPU難易度</p>
+            <div class="difficulty-group" role="radiogroup" aria-label="CPUの難易度">
+              <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false"><strong>弱</strong><span>WOOD</span></button>
+              <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true"><strong>中</strong><span>TABLE</span></button>
+              <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false"><strong>強</strong><span>AIR</span></button>
+            </div>
+            <div id="hardLevelPanel" class="hard-level-panel hidden" aria-label="エアホッケーレベル">
+              <p>AIR LEVEL <strong id="hardLevelLabel">1</strong></p>
+              <div class="level-group">
+                <button class="level selected" type="button" data-hard-level="1">1</button>
+                <button class="level" type="button" data-hard-level="2">2</button>
+                <button class="level" type="button" data-hard-level="3">3</button>
+                <button class="level" type="button" data-hard-level="4">4</button>
+                <button class="level" type="button" data-hard-level="5">5</button>
+              </div>
+            </div>
           </div>
-          <p class="help">タップ、ドラッグ、またはマウスでラケットを動かします</p>
+          <div class="setting-block">
+            <p class="setting-title">ラケット形状 <span>1P・2P共通</span></p>
+            <div class="choice-group shape-group" role="radiogroup" aria-label="ラケット形状">
+              <button class="choice shape-choice selected" type="button" data-shape="oval" role="radio" aria-checked="true">
+                <span class="shape-preview shape-preview-oval" aria-hidden="true"></span><span>オーバル</span>
+              </button>
+              <button class="choice shape-choice" type="button" data-shape="rect" role="radio" aria-checked="false">
+                <span class="shape-preview shape-preview-rect" aria-hidden="true"></span><span>ワイド</span>
+              </button>
+              <button class="choice shape-choice" type="button" data-shape="star" role="radio" aria-checked="false">
+                <span class="shape-preview shape-preview-star" aria-hidden="true"></span><span>スター</span>
+              </button>
+            </div>
+          </div>
+          <div class="balance-status" aria-label="点差ハンデ">
+            <strong>AUTO BALANCE</strong>
+            <span>2点差 +15% / 3点差 +30%</span>
+          </div>
+          <button id="startButton" class="primary-button" type="button">2人対戦スタート</button>
+          <p id="controlHelp" class="side-guide"><span>2P ↑ 上側</span><span>1P ↓ 下側</span></p>
+          <details class="connection-tools">
+            <summary>通信テスト</summary>
+            <div class="connection-launch-actions" aria-label="WebRTC接続実験">
+              <button id="createConnectionButton" class="secondary-button" type="button">接続実験を作る</button>
+              <button id="joinConnectionButton" class="secondary-button" type="button">接続実験に参加する</button>
+            </div>
+          </details>
         </div>
       </div>
 
-      <div id="gameOver" class="overlay hidden">
+      <div id="gameOver" class="overlay result-overlay hidden">
         <div class="panel">
           <p class="panel-label">GAME SET</p>
           <h2 id="resultText">あなたの勝ち！</h2>
           <p id="finalScore" class="final-score">5 - 0</p>
-          <button id="restartButton" class="primary-button" type="button">もう一度遊ぶ</button>
+          <div class="result-actions">
+            <button id="restartButton" class="primary-button" type="button">同じ設定で再戦</button>
+            <button id="resultMenuButton" class="secondary-button" type="button">設定を変える</button>
+          </div>
         </div>
       </div>
 
       <div id="pauseMenu" class="overlay hidden">
         <div class="panel">
+          <div class="pause-actions top-pause-actions local-only">
+            <button id="topResumeButton" class="primary-button" type="button">再開する</button>
+            <button id="topQuitButton" class="secondary-button" type="button">終了してメニューへ</button>
+          </div>
           <p class="panel-label">PAUSED</p>
           <h2>ゲームを中断中</h2>
           <div class="pause-actions">

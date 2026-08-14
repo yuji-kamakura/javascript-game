@@ -1,12 +1,13 @@
 "use strict";
 
-const CACHE_NAME = "pingpong-pwa-v1";
+const CACHE_NAME = "pingpong-pwa-v2";
 const OFFLINE_URL = new URL("./index.html", self.location.href).href;
 const APP_SHELL = [
   "./",
   "./index.html",
   "./style.css",
   "./game.js",
+  "./connection-experiment.mjs",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",

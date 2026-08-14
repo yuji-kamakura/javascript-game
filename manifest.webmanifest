@@ -1,7 +1,7 @@
 {
   "name": "ピンポン",
   "short_name": "ピンポン",
-  "description": "スマートフォンとPCで遊べるピンポンゲーム",
+  "description": "スマートフォン1台で2人対戦も楽しめるピンポンゲーム",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
