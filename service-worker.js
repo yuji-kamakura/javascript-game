@@ -27,7 +27,10 @@ self.addEventListener("activate", (event) => {
     caches.keys()
       .then((names) => Promise.all(
         names
-          .filter((name) => name.startsWith("pingpong-pwa-") && name !== CACHE_NAME)
+          .filter((name) => (
+            (name.startsWith("pingpong-pwa-") && name !== CACHE_NAME)
+            || name.startsWith("tower-guardian-app-")
+          ))
           .map((name) => caches.delete(name)),
       ))
       .then(() => self.clients.claim()),
