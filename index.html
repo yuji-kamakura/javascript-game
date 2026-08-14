@@ -1,66 +1,187 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="theme-color" content="#0b0714" />
-    <meta name="description" content="闇の塔を進む、スマホ対応アクションゲーム。" />
-    <meta property="og:title" content="Tower Guardian" />
-    <meta property="og:description" content="闇の塔を進む、スマホ対応アクションゲーム。" />
-    <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://yuji-kamakura.github.io/javascript-game/" />
-    <meta property="og:image" content="https://yuji-kamakura.github.io/javascript-game/og.png" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Tower Guardian" />
-    <title>Tower Guardian</title>
-    <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="icon" href="icons/icon-192.png" />
-    <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon.png" />
-    <link rel="stylesheet" href="style.css" />
-  </head>
-
-  <body>
-    <header class="app-header">
-      <h1>Tower Guardian</h1>
-      <button id="installButton" class="install-button" type="button" hidden>アプリをインストール</button>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#25160f">
+  <meta name="description" content="スマホ1台で2人対戦できる、オートバランス対応のピンポンゲーム。">
+  <meta property="og:title" content="ピンポン">
+  <meta property="og:description" content="スマホ1台で2人対戦。点差に応じたラケット調整と形状選択に対応。">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://yuji-kamakura.github.io/javascript-game/">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="ピンポン">
+  <title>ピンポン</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="apple-touch-icon" sizes="180x180" href="./icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="game-shell">
+    <header class="title-area">
+      <div>
+        <p class="eyebrow">TABLE ARCADE</p>
+        <h1>ピンポン</h1>
+      </div>
+      <button id="headerMenuButton" class="header-menu-button" type="button" aria-label="ゲームメニューを開く">☰ メニュー</button>
     </header>
 
-    <main class="game-shell">
-      <canvas id="gameCanvas" width="800" height="600" aria-label="Tower Guardian ゲーム画面"></canvas>
-      <p id="gameStatus" class="sr-only" aria-live="polite">タイトル画面</p>
-
-      <div id="touchControls" role="group" aria-label="タッチ操作">
-        <div class="dpad" role="group" aria-label="移動">
-          <button type="button" class="touch-button up" data-key="up" aria-label="上へ移動">▲</button>
-          <button type="button" class="touch-button left" data-key="left" aria-label="左へ移動">◀</button>
-          <button type="button" class="touch-button down" data-key="down" aria-label="下へ移動">▼</button>
-          <button type="button" class="touch-button right" data-key="right" aria-label="右へ移動">▶</button>
-        </div>
-        <div class="actions" role="group" aria-label="アクション">
-          <button type="button" class="touch-button dash" data-key="dash" aria-label="ダッシュ">DASH</button>
-          <button type="button" class="touch-button fire" data-key="fire" aria-label="攻撃">FIRE</button>
-        </div>
-        <button type="button" class="touch-button pause" data-key="pause" aria-label="一時停止">Ⅱ</button>
+    <section class="game-frame" aria-label="ピンポンゲーム">
+      <div class="score score-cpu" aria-live="polite">
+        <span id="topPlayerLabel">2P</span>
+        <strong id="cpuScore">0</strong>
+        <small id="topHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
       </div>
 
-      <button id="mobileInstallButton" class="mobile-install-button" type="button" hidden>ホーム画面に追加</button>
-      <aside id="iosInstallHint" class="install-hint" hidden>
-        Safariの共有ボタンから「ホーム画面に追加」を選ぶと、アプリとして遊べます。
-        <button type="button" data-dismiss-install aria-label="案内を閉じる">×</button>
-      </aside>
+      <canvas id="gameCanvas" width="480" height="800">
+        このゲームを遊ぶにはCanvas対応ブラウザが必要です。
+      </canvas>
 
-      <div class="rotate-hint" role="status">
-        <span class="phone-icon" aria-hidden="true">↻</span>
-        <strong>スマホを横向きにしてください</strong>
-        <span>横画面で快適に遊べます</span>
+      <div class="score score-player" aria-live="polite">
+        <span id="bottomPlayerLabel">1P</span>
+        <strong id="playerScore">0</strong>
+        <small id="bottomHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
       </div>
-    </main>
 
-    <noscript>このゲームを遊ぶにはJavaScriptを有効にしてください。</noscript>
-    <script src="game.js"></script>
-    <script src="pwa.js"></script>
-  </body>
+      <div id="menu" class="overlay">
+        <div class="panel menu-panel">
+          <p class="panel-label">FIRST TO 5</p>
+          <h2>対戦をセット</h2>
+          <div class="setting-block">
+            <p class="setting-title">プレーモード</p>
+            <div class="choice-group two-columns" role="radiogroup" aria-label="プレーモード">
+              <button class="choice mode-choice" type="button" data-mode="cpu" role="radio" aria-checked="false">1人 vs CPU</button>
+              <button class="choice mode-choice selected" type="button" data-mode="local" role="radio" aria-checked="true">このスマホで2人</button>
+            </div>
+          </div>
+          <div id="difficultySettings" class="setting-block hidden">
+            <p class="setting-title">CPU難易度</p>
+            <div class="difficulty-group" role="radiogroup" aria-label="CPUの難易度">
+              <button class="difficulty" type="button" data-level="easy" role="radio" aria-checked="false"><strong>弱</strong><span>WOOD</span></button>
+              <button class="difficulty selected" type="button" data-level="normal" role="radio" aria-checked="true"><strong>中</strong><span>TABLE</span></button>
+              <button class="difficulty" type="button" data-level="hard" role="radio" aria-checked="false"><strong>強</strong><span>AIR</span></button>
+            </div>
+            <div id="hardLevelPanel" class="hard-level-panel hidden" aria-label="エアホッケーレベル">
+              <p>AIR LEVEL <strong id="hardLevelLabel">1</strong></p>
+              <div class="level-group">
+                <button class="level selected" type="button" data-hard-level="1">1</button>
+                <button class="level" type="button" data-hard-level="2">2</button>
+                <button class="level" type="button" data-hard-level="3">3</button>
+                <button class="level" type="button" data-hard-level="4">4</button>
+                <button class="level" type="button" data-hard-level="5">5</button>
+              </div>
+            </div>
+          </div>
+          <div class="setting-block">
+            <p class="setting-title">ラケット形状 <span>1P・2P共通</span></p>
+            <div class="choice-group shape-group" role="radiogroup" aria-label="ラケット形状">
+              <button class="choice shape-choice selected" type="button" data-shape="oval" role="radio" aria-checked="true">
+                <span class="shape-preview shape-preview-oval" aria-hidden="true"></span><span>オーバル</span>
+              </button>
+              <button class="choice shape-choice" type="button" data-shape="rect" role="radio" aria-checked="false">
+                <span class="shape-preview shape-preview-rect" aria-hidden="true"></span><span>ワイド</span>
+              </button>
+              <button class="choice shape-choice" type="button" data-shape="star" role="radio" aria-checked="false">
+                <span class="shape-preview shape-preview-star" aria-hidden="true"></span><span>スター</span>
+              </button>
+            </div>
+          </div>
+          <div class="balance-status" aria-label="点差ハンデ">
+            <strong>AUTO BALANCE</strong>
+            <span>2点差 +15% / 3点差 +30%</span>
+          </div>
+          <button id="startButton" class="primary-button" type="button">2人対戦スタート</button>
+          <p id="controlHelp" class="side-guide"><span>2P ↑ 上側</span><span>1P ↓ 下側</span></p>
+          <details class="connection-tools">
+            <summary>通信テスト</summary>
+            <div class="connection-launch-actions" aria-label="WebRTC接続実験">
+              <button id="createConnectionButton" class="secondary-button" type="button">接続実験を作る</button>
+              <button id="joinConnectionButton" class="secondary-button" type="button">接続実験に参加する</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <div id="gameOver" class="overlay result-overlay hidden">
+        <div class="panel">
+          <p class="panel-label">GAME SET</p>
+          <h2 id="resultText">あなたの勝ち！</h2>
+          <p id="finalScore" class="final-score">5 - 0</p>
+          <div class="result-actions">
+            <button id="restartButton" class="primary-button" type="button">同じ設定で再戦</button>
+            <button id="resultMenuButton" class="secondary-button" type="button">設定を変える</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="pauseMenu" class="overlay hidden">
+        <div class="panel">
+          <div class="pause-actions top-pause-actions local-only">
+            <button id="topResumeButton" class="primary-button" type="button">再開する</button>
+            <button id="topQuitButton" class="secondary-button" type="button">終了してメニューへ</button>
+          </div>
+          <p class="panel-label">PAUSED</p>
+          <h2>ゲームを中断中</h2>
+          <div class="pause-actions">
+            <button id="resumeButton" class="primary-button" type="button">再開する</button>
+            <button id="quitButton" class="secondary-button" type="button">終了してメニューへ</button>
+          </div>
+          <p class="help">もう一度 Esc キーを押しても再開できます</p>
+        </div>
+      </div>
+
+      <div id="connectionExperiment" class="overlay connection-overlay hidden">
+        <div class="panel connection-panel">
+          <button id="closeConnectionButton" class="connection-close" type="button" aria-label="接続実験を閉じる">×</button>
+          <p class="panel-label">P2P CONNECTION TEST</p>
+          <h2 id="connectionTitle">接続実験</h2>
+
+          <div class="connection-diagnostics" aria-live="polite">
+            <p><span>接続</span><strong id="peerConnectionState">未接続</strong></p>
+            <p><span>ICE</span><strong id="iceConnectionState">new</strong></p>
+            <p><span>control</span><strong id="controlChannelState">closed</strong></p>
+            <p><span>realtime</span><strong id="realtimeChannelState">closed</strong></p>
+            <p><span>RTT</span><strong id="connectionRtt">—</strong></p>
+          </div>
+
+          <p id="connectionMessage" class="connection-message">接続方法を準備しています。</p>
+
+          <section id="hostConnectionSection" class="connection-section hidden">
+            <label for="offerOutput">1. Offerを相手へコピー</label>
+            <textarea id="offerOutput" class="signal-text" readonly spellcheck="false" maxlength="65536"></textarea>
+            <button id="copyOfferButton" class="secondary-button compact-button" type="button" disabled>Offerをコピー</button>
+
+            <label for="answerInput">2. 相手のAnswerを貼り付け</label>
+            <textarea id="answerInput" class="signal-text" placeholder="ここにAnswerを貼り付け" spellcheck="false" maxlength="65536" autocapitalize="off" autocomplete="off"></textarea>
+            <button id="applyAnswerButton" class="primary-button compact-button" type="button">Answerを適用</button>
+          </section>
+
+          <section id="guestConnectionSection" class="connection-section hidden">
+            <label for="offerInput">1. 相手のOfferを貼り付け</label>
+            <textarea id="offerInput" class="signal-text" placeholder="ここにOfferを貼り付け" spellcheck="false" maxlength="65536" autocapitalize="off" autocomplete="off"></textarea>
+            <button id="createAnswerButton" class="primary-button compact-button" type="button">Offerを適用してAnswerを作る</button>
+
+            <label for="answerOutput">2. Answerを相手へコピー</label>
+            <textarea id="answerOutput" class="signal-text" readonly spellcheck="false" maxlength="65536"></textarea>
+            <button id="copyAnswerButton" class="secondary-button compact-button" type="button" disabled>Answerをコピー</button>
+          </section>
+
+          <button id="sendPingButton" class="secondary-button compact-button hidden" type="button">pingを送信</button>
+          <button id="endConnectionButton" class="text-button" type="button">接続実験を終了</button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="game.js"></script>
+  <script type="module" src="./connection-experiment.mjs"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("./service-worker.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
 </html>
