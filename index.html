@@ -2,11 +2,11 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
   <meta name="theme-color" content="#25160f">
-  <meta name="description" content="スマホ1台で2人対戦できる、オートバランス対応のピンポンゲーム。">
+  <meta name="description" content="スマホ1台で2人対戦。オートバランスと10秒アイテムのパーティーモードに対応したピンポンゲーム。">
   <meta property="og:title" content="ピンポン">
-  <meta property="og:description" content="スマホ1台で2人対戦。点差に応じたラケット調整と形状選択に対応。">
+  <meta property="og:description" content="スマホ1台で2人対戦。打つたび加速するボールと5種類のパーティーアイテムに対応。">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://yuji-kamakura.github.io/javascript-game/">
   <meta name="apple-mobile-web-app-capable" content="yes">
@@ -32,6 +32,13 @@
         <span id="topPlayerLabel">2P</span>
         <strong id="cpuScore">0</strong>
         <small id="topHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
+        <div id="topEffects" class="effect-slots" aria-label="有効なアイテム効果なし" aria-hidden="true">
+          <span data-effect="multiball" title="3ボール"><b>3B</b><em></em></span>
+          <span data-effect="paddle" title="ラケット拡大"><b>XL</b><em></em></span>
+          <span data-effect="goal" title="ゴール縮小"><b>G</b><em></em></span>
+          <span data-effect="round" title="丸いコート"><b>O</b><em></em></span>
+          <span data-effect="weapon" title="フリーズ弾"><b>S</b><em></em></span>
+        </div>
       </div>
 
       <canvas id="gameCanvas" width="480" height="800">
@@ -42,17 +49,40 @@
         <span id="bottomPlayerLabel">1P</span>
         <strong id="playerScore">0</strong>
         <small id="bottomHandicap" class="handicap" aria-label="ラケットサイズ補正"></small>
+        <div id="bottomEffects" class="effect-slots" aria-label="有効なアイテム効果なし" aria-hidden="true">
+          <span data-effect="multiball" title="3ボール"><b>3B</b><em></em></span>
+          <span data-effect="paddle" title="ラケット拡大"><b>XL</b><em></em></span>
+          <span data-effect="goal" title="ゴール縮小"><b>G</b><em></em></span>
+          <span data-effect="round" title="丸いコート"><b>O</b><em></em></span>
+          <span data-effect="weapon" title="フリーズ弾"><b>S</b><em></em></span>
+        </div>
       </div>
+
+      <p id="partyAnnouncement" class="sr-only" aria-live="polite"></p>
 
       <div id="menu" class="overlay">
         <div class="panel menu-panel">
           <p class="panel-label">FIRST TO 5</p>
           <h2>対戦をセット</h2>
           <div class="setting-block">
-            <p class="setting-title">プレーモード</p>
-            <div class="choice-group two-columns" role="radiogroup" aria-label="プレーモード">
+            <p class="setting-title">対戦相手</p>
+            <div class="choice-group two-columns" role="radiogroup" aria-label="対戦相手">
               <button class="choice mode-choice" type="button" data-mode="cpu" role="radio" aria-checked="false">1人 vs CPU</button>
               <button class="choice mode-choice selected" type="button" data-mode="local" role="radio" aria-checked="true">このスマホで2人</button>
+            </div>
+          </div>
+          <div class="setting-block">
+            <p class="setting-title">ルール</p>
+            <div class="choice-group two-columns" role="radiogroup" aria-label="対戦ルール">
+              <button class="choice rule-choice selected" type="button" data-rule="standard" role="radio" aria-checked="true">通常</button>
+              <button class="choice rule-choice" type="button" data-rule="party" role="radio" aria-checked="false">パーティー</button>
+            </div>
+            <div id="partyLegend" class="party-legend hidden" aria-label="パーティーアイテム">
+              <span data-effect="multiball" title="ボールが3個になる"><b>3B</b>3球</span>
+              <span data-effect="paddle" title="自分のラケットが大きくなる"><b>XL</b>拡大</span>
+              <span data-effect="goal" title="自分のゴールが小さくなる"><b>G</b>小G</span>
+              <span data-effect="round" title="コートが丸くなる"><b>O</b>丸</span>
+              <span data-effect="weapon" title="相手を止める弾を撃てる"><b>S</b>弾</span>
             </div>
           </div>
           <div id="difficultySettings" class="setting-block hidden">

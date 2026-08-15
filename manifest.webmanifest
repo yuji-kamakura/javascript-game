@@ -1,7 +1,7 @@
 {
   "name": "ピンポン",
   "short_name": "ピンポン",
-  "description": "スマートフォン1台で2人対戦も楽しめるピンポンゲーム",
+  "description": "スマートフォン1台で2人対戦と10秒アイテムのパーティーモードを楽しめるピンポンゲーム",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
