@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "pingpong-pwa-v2";
+const CACHE_NAME = "pingpong-pwa-v3";
 const OFFLINE_URL = new URL("./index.html", self.location.href).href;
 const APP_SHELL = [
   "./",
